@@ -1,0 +1,25 @@
+{
+  "name": "CreditStamina",
+  "displayName": "Credit Stamina",
+  "version": "1.0.0",
+  "description": "AI-powered credit repair assistant to help improve your credit score",
+  "ios": {
+    "bundleIdentifier": "com.creditstamina.app",
+    "buildNumber": "1",
+    "supportsTablet": true,
+    "infoPlist": {
+      "NSCameraUsageDescription": "Credit Stamina needs camera access to scan documents.",
+      "NSPhotoLibraryUsageDescription": "Credit Stamina needs photo library access to upload credit reports."
+    }
+  },
+  "android": {
+    "package": "com.creditstamina.app",
+    "versionCode": 1,
+    "permissions": [
+      "android.permission.INTERNET",
+      "android.permission.CAMERA",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ]
+  }
+}
