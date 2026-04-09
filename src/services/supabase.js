@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // Your Supabase configuration
 // These should match your existing web app configuration
-const supabaseUrl = 'YOUR_SUPABASE_URL'; // Replace with your Supabase URL
-const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your Supabase anon key
+const supabaseUrl = 'https://YOUR_SUPABASE_PROJECT_URL';
+const supabaseAnonKey = 'SUPABASE_ANON_KEY_REMOVED_FROM_HISTORY';
 
 // Create Supabase client with AsyncStorage for React Native
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
