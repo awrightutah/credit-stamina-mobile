@@ -23,6 +23,9 @@ target 'CreditStamina' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # Workaround for RNReanimated RNWorklets issue
+  pod 'RNWorklets', :path => '../node_modules/react-native-worklets'
+
   post_install do |installer|
     react_native_post_install(
       installer,
