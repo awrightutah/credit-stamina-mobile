@@ -22,7 +22,9 @@ export const AuthProvider = ({ children }) => {
     // Get initial session
     const initializeAuth = async () => {
       try {
+        console.log('Initializing auth...');
         const session = await getSession();
+        console.log('Session:', session);
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.access_token) {
@@ -30,6 +32,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (e) {
         console.error('Auth initialization error:', e);
+        setError(e.message);
       } finally {
         setLoading(false);
       }
@@ -38,16 +41,23 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.access_token) {
-          setStoredToken(session.access_token);
+    let subscription = null;
+    try {
+      const { data } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log('Auth state changed:', event);
+          setSession(session);
+          setUser(session?.user ?? null);
+          if (session?.access_token) {
+            setStoredToken(session.access_token);
+          }
+          setLoading(false);
         }
-        setLoading(false);
-      }
-    );
+      );
+      subscription = data?.subscription;
+    } catch (e) {
+      console.error('Auth state change listener error:', e);
+    }
 
     return () => {
       subscription?.unsubscribe();

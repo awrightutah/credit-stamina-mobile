@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
 // Your Supabase configuration
-// These should match your existing web app configuration
 const supabaseUrl = 'https://YOUR_SUPABASE_PROJECT_URL';
 const supabaseAnonKey = 'SUPABASE_ANON_KEY_REMOVED_FROM_HISTORY';
 
@@ -18,50 +17,85 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Auth helper functions
 export const signUp = async (email, password) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Sign up error:', e);
+    throw e;
+  }
 };
 
 export const signIn = async (email, password) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Sign in error:', e);
+    throw e;
+  }
 };
 
 export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (e) {
+    console.error('Sign out error:', e);
+    throw e;
+  }
 };
 
 export const getCurrentUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch (e) {
+    console.error('Get user error:', e);
+    return null;
+  }
 };
 
 export const getSession = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  } catch (e) {
+    console.error('Get session error:', e);
+    return null;
+  }
 };
 
 export const resetPassword = async (email) => {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Reset password error:', e);
+    throw e;
+  }
 };
 
 export const updatePassword = async (newPassword) => {
-  const { data, error } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Update password error:', e);
+    throw e;
+  }
 };
 
 // Listen to auth state changes
