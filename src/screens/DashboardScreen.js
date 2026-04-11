@@ -160,7 +160,7 @@ const DashboardScreen = ({ navigation }) => {
         <View>
           <Text style={styles.appName}>Credit Stamina</Text>
           <Text style={styles.greeting}>
-            Welcome back, <Text style={styles.greetingEmail}>{user?.email?.split('@')[0] || 'User'}</Text>
+            Welcome back, <Text style={styles.greetingEmail}>{user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
           </Text>
         </View>
         <View style={styles.pointsBadge}>
