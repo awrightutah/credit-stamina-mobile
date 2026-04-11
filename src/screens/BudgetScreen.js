@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { budgetAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -57,6 +58,7 @@ const EDUCATION_ITEMS = [
 ];
 
 const BudgetScreen = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [budget, setBudget] = useState(null);
@@ -81,8 +83,8 @@ const BudgetScreen = () => {
   };
 
   useEffect(() => {
-    fetchBudget();
-  }, []);
+    if (user?.id) fetchBudget();
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

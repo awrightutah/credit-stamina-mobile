@@ -27,26 +27,33 @@ import ActivityScreen from '../screens/ActivityScreen';
 
 // Colors
 const COLORS = {
-  primary: '#3B82F6',
-  secondary: '#10B981',
-  background: '#0F172A',
-  card: '#1E293B',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  border: '#334155',
-  danger: '#EF4444',
-  warning: '#F59E0B',
-  success: '#10B981',
+  primary: '#1E40AF',
+  purple: '#7C3AED',
+  background: '#0f172a',
+  card: '#111827',
+  text: '#FFFFFF',
+  textSecondary: '#6B7280',
+  border: '#374151',
 };
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Tab icon component (placeholder - will use vector icons)
-const TabIcon = ({ name, focused, color }) => {
-  // For now, return null - will be replaced with actual icons
-  return null;
+import { Text } from 'react-native';
+
+const TAB_ICONS = {
+  Dashboard: ['🏠', '🏡'],
+  Accounts: ['🏦', '🏦'],
+  Actions: ['✅', '✅'],
+  Score: ['📊', '📊'],
+  Profile: ['👤', '👤'],
 };
+
+const TabIcon = ({ name, focused }) => (
+  <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.55 }}>
+    {TAB_ICONS[name]?.[focused ? 1 : 0] ?? '•'}
+  </Text>
+);
 
 // Main Tab Navigator
 const MainTabs = () => {
@@ -62,48 +69,53 @@ const MainTabs = () => {
           paddingBottom: 8,
           height: 60,
         },
-        tabBarActiveTintColor: COLORS.primary,
+        tabBarActiveTintColor: COLORS.purple,
         tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
+          marginBottom: 2,
         },
       }}
     >
-      <Tab.Screen 
-        name="Dashboard" 
+      <Tab.Screen
+        name="Dashboard"
         component={DashboardScreen}
         options={{
           tabBarLabel: 'Home',
-          // tabBarIcon: (props) => <TabIcon name="home" {...props} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="Dashboard" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Accounts" 
+      <Tab.Screen
+        name="Accounts"
         component={AccountsScreen}
         options={{
           tabBarLabel: 'Accounts',
+          tabBarIcon: ({ focused }) => <TabIcon name="Accounts" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Actions" 
+      <Tab.Screen
+        name="Actions"
         component={ActionsScreen}
         options={{
           tabBarLabel: 'Actions',
+          tabBarIcon: ({ focused }) => <TabIcon name="Actions" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Score" 
+      <Tab.Screen
+        name="Score"
         component={ScoreScreen}
         options={{
           tabBarLabel: 'Score',
+          tabBarIcon: ({ focused }) => <TabIcon name="Score" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Profile" 
+      <Tab.Screen
+        name="Profile"
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
+          tabBarIcon: ({ focused }) => <TabIcon name="Profile" focused={focused} />,
         }}
       />
     </Tab.Navigator>
