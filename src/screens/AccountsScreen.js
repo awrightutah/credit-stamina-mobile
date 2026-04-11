@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  SectionList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -229,11 +230,30 @@ const AccountsScreen = ({ navigation }) => {
     fetchAccounts();
   }, []);
 
-  const filteredAccounts = accounts.filter(a => {
-    const matchesLane = filter === 'all' || a.lane === filter;
-    const matchesSearch = !search || (a.creditor || a.account_name || '').toLowerCase().includes(search.toLowerCase());
-    return matchesLane && matchesSearch;
-  });
+  const matchesSearch = (a) =>
+    !search || (a.creditor || a.account_name || '').toLowerCase().includes(search.toLowerCase());
+
+  // Lane order — most urgent first
+  const LANE_ORDER = ['Active Damage', 'Removable', 'Aging/Monitor'];
+
+  // For "All" view: build sections grouped by lane in priority order
+  const sections = LANE_ORDER.map(lane => ({
+    lane,
+    title: lane,
+    color: getLaneColor(lane),
+    data: accounts.filter(a => a.lane === lane && matchesSearch(a)),
+  })).filter(s => s.data.length > 0);
+
+  // Add unknown lane as a catch-all
+  const unknownAccounts = accounts.filter(
+    a => !LANE_ORDER.includes(a.lane) && matchesSearch(a)
+  );
+  if (unknownAccounts.length > 0) {
+    sections.push({ lane: 'Other', title: 'Other', color: COLORS.textSecondary, data: unknownAccounts });
+  }
+
+  // For single-lane filter: flat list
+  const filteredAccounts = accounts.filter(a => a.lane === filter && matchesSearch(a));
 
   const handleAccountPress = (account) => {
     setSelectedAccount(account);
@@ -309,46 +329,74 @@ const AccountsScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* Account List */}
-      <FlatList
-        data={filteredAccounts}
-        renderItem={({ item }) => <AccountCard item={item} onPress={handleAccountPress} />}
-        keyExtractor={(item) => item.id?.toString() ?? `${item.creditor}-${Math.random()}`}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {error ? (
-              <>
-                <Text style={styles.emptyIcon}>⚠️</Text>
-                <Text style={styles.emptyText}>{error}</Text>
-                <TouchableOpacity style={styles.primaryButton} onPress={fetchAccounts}>
-                  <Text style={styles.primaryButtonText}>Try Again</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.emptyIcon}>📄</Text>
-                <Text style={styles.emptyTitle}>No Accounts Found</Text>
-                <Text style={styles.emptySubtext}>
-                  {search || filter !== 'all'
-                    ? 'Try a different filter or search term'
-                    : 'Upload a credit report to see your accounts'}
+      {filter === 'all' ? (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id?.toString() ?? `${item.creditor}-${Math.random()}`}
+          renderItem={({ item }) => <AccountCard item={item} onPress={handleAccountPress} />}
+          renderSectionHeader={({ section }) => (
+            <View style={[styles.sectionHeader, { borderLeftColor: section.color }]}>
+              <View style={[styles.sectionDot, { backgroundColor: section.color }]} />
+              <Text style={[styles.sectionHeaderText, { color: section.color }]}>
+                {section.title}
+              </Text>
+              <View style={[styles.sectionCount, { backgroundColor: section.color + '22' }]}>
+                <Text style={[styles.sectionCountText, { color: section.color }]}>
+                  {section.data.length}
                 </Text>
-                {!search && filter === 'all' && (
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={() => navigation.navigate('Upload')}
-                  >
-                    <Text style={styles.primaryButtonText}>Upload Credit Report</Text>
+              </View>
+            </View>
+          )}
+          contentContainerStyle={styles.listContent}
+          stickySectionHeadersEnabled={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              {error ? (
+                <>
+                  <Text style={styles.emptyIcon}>⚠️</Text>
+                  <Text style={styles.emptyText}>{error}</Text>
+                  <TouchableOpacity style={styles.primaryButton} onPress={fetchAccounts}>
+                    <Text style={styles.primaryButtonText}>Try Again</Text>
                   </TouchableOpacity>
-                )}
-              </>
-            )}
-          </View>
-        }
-      />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.emptyIcon}>📄</Text>
+                  <Text style={styles.emptyTitle}>No Accounts Found</Text>
+                  <Text style={styles.emptySubtext}>
+                    {search ? 'Try a different search term' : 'Upload a credit report to see your accounts'}
+                  </Text>
+                  {!search && (
+                    <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('Upload')}>
+                      <Text style={styles.primaryButtonText}>Upload Credit Report</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={filteredAccounts}
+          renderItem={({ item }) => <AccountCard item={item} onPress={handleAccountPress} />}
+          keyExtractor={(item) => item.id?.toString() ?? `${item.creditor}-${Math.random()}`}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>📄</Text>
+              <Text style={styles.emptyTitle}>No Accounts</Text>
+              <Text style={styles.emptySubtext}>No accounts in this lane</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* Detail Modal */}
       <AccountDetailModal
@@ -455,6 +503,38 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginTop: 8,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    paddingLeft: 10,
+    gap: 8,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    flex: 1,
+  },
+  sectionCount: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  sectionCountText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   // Account Card
   accountCard: {
