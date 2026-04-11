@@ -16,17 +16,39 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Auth helper functions
-export const signUp = async (email, password, fullName) => {
+// profileData: { fullName, phone, address: { street, city, state, zip } }
+export const signUp = async (email, password, profileData = {}) => {
   try {
+    const { fullName, phone, address } = profileData;
+    const metadata = {};
+    if (fullName) metadata.full_name = fullName;
+    if (phone)    metadata.phone = phone;
+    if (address?.street) metadata.address_street = address.street;
+    if (address?.city)   metadata.address_city   = address.city;
+    if (address?.state)  metadata.address_state  = address.state;
+    if (address?.zip)    metadata.address_zip    = address.zip;
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: fullName ? { data: { full_name: fullName } } : undefined,
+      options: Object.keys(metadata).length ? { data: metadata } : undefined,
     });
     if (error) throw error;
     return data;
   } catch (e) {
     console.error('Sign up error:', e);
+    throw e;
+  }
+};
+
+// Update Supabase user metadata (name, phone, address, etc.)
+export const updateUserProfile = async (metadata) => {
+  try {
+    const { data, error } = await supabase.auth.updateUser({ data: metadata });
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Update profile error:', e);
     throw e;
   }
 };

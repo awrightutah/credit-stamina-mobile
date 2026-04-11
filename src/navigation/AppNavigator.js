@@ -29,6 +29,7 @@ import ActionPlanScreen from '../screens/ActionPlanScreen';
 import BudgetScreen from '../screens/BudgetScreen';
 import ScoreSimulatorScreen from '../screens/ScoreSimulatorScreen';
 import ActivityScreen from '../screens/ActivityScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 const COLORS = {
   primary: '#1E40AF',
@@ -130,6 +131,7 @@ const AppNavigator = () => {
         <Stack.Screen name="Budget" component={BudgetScreen} />
         <Stack.Screen name="ScoreSimulator" component={ScoreSimulatorScreen} />
         <Stack.Screen name="Activity" component={ActivityScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       </Stack.Navigator>
     );
   }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPassword } from '../services/supabase';
-import { setStoredToken } from '../services/api';
+import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPassword, updateUserProfile } from '../services/supabase';
+import { setStoredToken, authAPI } from '../services/api';
 
 const AuthContext = createContext({});
 
@@ -78,17 +78,53 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (email, password, fullName) => {
+  // profileData: { fullName, phone, address: { street, city, state, zip } }
+  const register = async (email, password, profileData) => {
     try {
       setError(null);
       setLoading(true);
-      const data = await signUp(email, password, fullName);
+      // Support legacy string argument (fullName only)
+      const data = await signUp(
+        email,
+        password,
+        typeof profileData === 'string' ? { fullName: profileData } : profileData
+      );
       return data;
     } catch (e) {
       setError(e.message);
       throw e;
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Update user name/phone/address in Supabase metadata + backend profile
+  const updateProfile = async (profileData) => {
+    try {
+      // Build Supabase metadata object
+      const metadata = {};
+      if (profileData.fullName !== undefined)       metadata.full_name       = profileData.fullName;
+      if (profileData.phone !== undefined)          metadata.phone           = profileData.phone;
+      if (profileData.address_street !== undefined) metadata.address_street  = profileData.address_street;
+      if (profileData.address_city !== undefined)   metadata.address_city    = profileData.address_city;
+      if (profileData.address_state !== undefined)  metadata.address_state   = profileData.address_state;
+      if (profileData.address_zip !== undefined)    metadata.address_zip     = profileData.address_zip;
+
+      // Update Supabase — triggers onAuthStateChange so user state refreshes automatically
+      await updateUserProfile(metadata);
+
+      // Also sync to backend profile
+      const backendPayload = {};
+      if (profileData.fullName !== undefined)       backendPayload.full_name      = profileData.fullName;
+      if (profileData.phone !== undefined)          backendPayload.phone          = profileData.phone;
+      if (profileData.address_street !== undefined) backendPayload.address_street = profileData.address_street;
+      if (profileData.address_city !== undefined)   backendPayload.address_city   = profileData.address_city;
+      if (profileData.address_state !== undefined)  backendPayload.address_state  = profileData.address_state;
+      if (profileData.address_zip !== undefined)    backendPayload.address_zip    = profileData.address_zip;
+      await authAPI.updateProfile(backendPayload).catch(() => null); // don't fail if backend is unavailable
+    } catch (e) {
+      setError(e.message);
+      throw e;
     }
   };
 
@@ -127,6 +163,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     forgotPassword,
+    updateProfile,
     setError,
   };
 

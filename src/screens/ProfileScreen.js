@@ -119,12 +119,13 @@ const ProfileScreen = () => {
     ]);
   };
 
-  const displayName = user?.user_metadata?.full_name
-    || user?.user_metadata?.name
-    || user?.email?.split('@')[0]
-    || 'Credit Stamina User';
-
+  const meta = user?.user_metadata ?? {};
+  const displayName = meta.full_name || meta.name || user?.email?.split('@')[0] || 'Credit Stamina User';
   const initials = displayName.charAt(0).toUpperCase();
+
+  // Build address string for subtitle
+  const addressParts = [meta.address_street, meta.address_city, meta.address_state].filter(Boolean);
+  const addressLine = addressParts.length > 0 ? addressParts.join(', ') : null;
 
   const planLabel = subscription?.plan_name || subscription?.plan || 'Free Plan';
   const isActive = subscription?.status === 'active';
@@ -145,6 +146,9 @@ const ProfileScreen = () => {
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{displayName}</Text>
             <Text style={styles.userEmail}>{user?.email}</Text>
+            {addressLine ? (
+              <Text style={styles.userAddress}>{addressLine}</Text>
+            ) : null}
           </View>
           <View style={styles.pointsBadge}>
             <Text style={styles.pointsNumber}>{points}</Text>
@@ -194,6 +198,12 @@ const ProfileScreen = () => {
 
         {/* Account */}
         <SectionCard title="ACCOUNT">
+          <MenuItem
+            icon="✏️"
+            title="Edit Profile"
+            subtitle="Name, phone, mailing address"
+            onPress={() => navigation.navigate('EditProfile')}
+          />
           <MenuItem
             icon="⚙️"
             title="Settings"
@@ -339,6 +349,11 @@ const styles = StyleSheet.create({
   },
   userEmail: {
     fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  userAddress: {
+    fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 2,
   },

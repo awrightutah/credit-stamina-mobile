@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 const COLORS = {
-  primary: '#3B82F6',
-  secondary: '#10B981',
+  primary: '#1E40AF',
+  purple: '#7C3AED',
   background: '#0F172A',
   card: '#1E293B',
   text: '#F8FAFC',
@@ -25,36 +25,70 @@ const COLORS = {
   inputBg: '#1E293B',
 };
 
+const Field = ({ label, children }) => (
+  <View style={styles.fieldWrap}>
+    <Text style={styles.label}>{label}</Text>
+    {children}
+  </View>
+);
+
 const RegisterScreen = ({ navigation }) => {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const { register } = useAuth();
 
+  // Personal info
+  const [fullName, setFullName]       = useState('');
+  const [phone, setPhone]             = useState('');
+
+  // Address
+  const [street, setStreet]           = useState('');
+  const [city, setCity]               = useState('');
+  const [state, setState]             = useState('');
+  const [zip, setZip]                 = useState('');
+
+  // Account
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+  const [success, setSuccess]         = useState(false);
+
+  // Refs for keyboard next
+  const phoneRef     = useRef(null);
+  const streetRef    = useRef(null);
+  const cityRef      = useRef(null);
+  const stateRef     = useRef(null);
+  const zipRef       = useRef(null);
+  const emailRef     = useRef(null);
+  const passwordRef  = useRef(null);
+  const confirmRef   = useRef(null);
+
   const handleRegister = async () => {
-    if (!fullName || !email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
+    if (!fullName.trim()) { setError('Please enter your full name'); return; }
+    if (!phone.trim())    { setError('Please enter your phone number'); return; }
+    if (!street.trim())   { setError('Please enter your street address'); return; }
+    if (!city.trim())     { setError('Please enter your city'); return; }
+    if (!state.trim())    { setError('Please enter your state'); return; }
+    if (!zip.trim())      { setError('Please enter your ZIP code'); return; }
+    if (!email.trim())    { setError('Please enter your email'); return; }
+    if (!password)        { setError('Please create a password'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
 
     try {
       setLoading(true);
       setError('');
-      await register(email, password, fullName.trim());
+      await register(email.trim().toLowerCase(), password, {
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        address: {
+          street: street.trim(),
+          city: city.trim(),
+          state: state.trim().toUpperCase(),
+          zip: zip.trim(),
+        },
+      });
       setSuccess(true);
     } catch (err) {
       setError(err.message || 'Failed to create account');
@@ -72,12 +106,9 @@ const RegisterScreen = ({ navigation }) => {
           </View>
           <Text style={styles.successTitle}>Check Your Email</Text>
           <Text style={styles.successText}>
-            We've sent a confirmation link to {email}. Please click the link to verify your account.
+            We've sent a confirmation link to {email}. Click the link to verify your account before signing in.
           </Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('Login')}
-          >
+          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Login')}>
             <Text style={styles.buttonText}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
@@ -90,9 +121,10 @@ const RegisterScreen = ({ navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -103,86 +135,179 @@ const RegisterScreen = ({ navigation }) => {
           <Text style={styles.subtitle}>Start your credit repair journey</Text>
         </View>
 
-        {/* Register Form */}
-        <View style={styles.form}>
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your full name"
-              placeholderTextColor={COLORS.textSecondary}
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
+        {/* Error banner */}
+        {!!error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
+        )}
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your email"
-              placeholderTextColor={COLORS.textSecondary}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoCorrect={false}
-            />
+        {/* ── Personal Info ── */}
+        <Text style={styles.sectionLabel}>PERSONAL INFO</Text>
+
+        <Field label="Full Name *">
+          <TextInput
+            style={styles.input}
+            placeholder="First and last name"
+            placeholderTextColor={COLORS.textSecondary}
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={() => phoneRef.current?.focus()}
+          />
+        </Field>
+
+        <Field label="Phone Number *">
+          <TextInput
+            ref={phoneRef}
+            style={styles.input}
+            placeholder="(555) 555-5555"
+            placeholderTextColor={COLORS.textSecondary}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            returnKeyType="next"
+            onSubmitEditing={() => streetRef.current?.focus()}
+          />
+        </Field>
+
+        {/* ── Mailing Address ── */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>MAILING ADDRESS</Text>
+        <Text style={styles.sectionHint}>Used for generating dispute letters</Text>
+
+        <Field label="Street Address *">
+          <TextInput
+            ref={streetRef}
+            style={styles.input}
+            placeholder="123 Main St, Apt 4B"
+            placeholderTextColor={COLORS.textSecondary}
+            value={street}
+            onChangeText={setStreet}
+            autoCapitalize="words"
+            returnKeyType="next"
+            onSubmitEditing={() => cityRef.current?.focus()}
+          />
+        </Field>
+
+        <View style={styles.row}>
+          <View style={styles.rowFlex2}>
+            <Field label="City *">
+              <TextInput
+                ref={cityRef}
+                style={styles.input}
+                placeholder="City"
+                placeholderTextColor={COLORS.textSecondary}
+                value={city}
+                onChangeText={setCity}
+                autoCapitalize="words"
+                returnKeyType="next"
+                onSubmitEditing={() => stateRef.current?.focus()}
+              />
+            </Field>
           </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Create a password (min 6 characters)"
-              placeholderTextColor={COLORS.textSecondary}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-            />
+          <View style={[styles.rowFlex1, { marginLeft: 10 }]}>
+            <Field label="State *">
+              <TextInput
+                ref={stateRef}
+                style={styles.input}
+                placeholder="TX"
+                placeholderTextColor={COLORS.textSecondary}
+                value={state}
+                onChangeText={setState}
+                autoCapitalize="characters"
+                maxLength={2}
+                returnKeyType="next"
+                onSubmitEditing={() => zipRef.current?.focus()}
+              />
+            </Field>
           </View>
+        </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm your password"
-              placeholderTextColor={COLORS.textSecondary}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-          </View>
+        <Field label="ZIP Code *">
+          <TextInput
+            ref={zipRef}
+            style={styles.input}
+            placeholder="75001"
+            placeholderTextColor={COLORS.textSecondary}
+            value={zip}
+            onChangeText={setZip}
+            keyboardType="number-pad"
+            maxLength={10}
+            returnKeyType="next"
+            onSubmitEditing={() => emailRef.current?.focus()}
+          />
+        </Field>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={COLORS.text} />
-            ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
+        {/* ── Account ── */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>ACCOUNT</Text>
 
-          <View style={styles.termsContainer}>
-            <Text style={styles.termsText}>
-              By creating an account, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
-            </Text>
-          </View>
+        <Field label="Email *">
+          <TextInput
+            ref={emailRef}
+            style={styles.input}
+            placeholder="you@example.com"
+            placeholderTextColor={COLORS.textSecondary}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+          />
+        </Field>
+
+        <Field label="Password *">
+          <TextInput
+            ref={passwordRef}
+            style={styles.input}
+            placeholder="Minimum 6 characters"
+            placeholderTextColor={COLORS.textSecondary}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            returnKeyType="next"
+            onSubmitEditing={() => confirmRef.current?.focus()}
+          />
+        </Field>
+
+        <Field label="Confirm Password *">
+          <TextInput
+            ref={confirmRef}
+            style={styles.input}
+            placeholder="Re-enter password"
+            placeholderTextColor={COLORS.textSecondary}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={handleRegister}
+          />
+        </Field>
+
+        {/* Submit */}
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={COLORS.text} />
+          ) : (
+            <Text style={styles.buttonText}>Create Account</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.termsContainer}>
+          <Text style={styles.termsText}>
+            By creating an account, you agree to our{' '}
+            <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -197,33 +322,31 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
+    paddingBottom: 48,
   },
   header: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   backButton: {
     color: COLORS.primary,
     fontSize: 16,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textSecondary,
-  },
-  form: {
-    width: '100%',
   },
   errorContainer: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
     borderWidth: 1,
     borderColor: COLORS.danger,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 16,
   },
@@ -232,42 +355,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  inputContainer: {
-    marginBottom: 16,
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 4,
+    marginTop: 4,
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+  },
+  fieldWrap: {
+    marginBottom: 14,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   input: {
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
+    padding: 14,
+    fontSize: 15,
     color: COLORS.text,
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  rowFlex2: { flex: 2 },
+  rowFlex1: { flex: 1 },
   button: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.purple,
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   buttonText: {
     color: COLORS.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   termsContainer: {
-    marginTop: 24,
-    paddingHorizontal: 16,
+    marginTop: 20,
+    paddingHorizontal: 8,
   },
   termsText: {
     color: COLORS.textSecondary,
@@ -278,11 +420,12 @@ const styles = StyleSheet.create({
   termsLink: {
     color: COLORS.primary,
   },
+  // Success
   successContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 32,
   },
   successIcon: {
     width: 80,
@@ -304,11 +447,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   successText: {
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
-    lineHeight: 24,
+    lineHeight: 22,
   },
 });
 
