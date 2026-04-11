@@ -44,6 +44,14 @@ export const signUp = async (email, password, profileData = {}) => {
 // Update Supabase user metadata (name, phone, address, etc.)
 export const updateUserProfile = async (metadata) => {
   try {
+    // Ensure the session is fresh before calling updateUser
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData?.session) {
+      // Try to refresh
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw new Error('Session expired — please sign out and sign back in.');
+    }
+
     const { data, error } = await supabase.auth.updateUser({ data: metadata });
     if (error) throw error;
     return data;

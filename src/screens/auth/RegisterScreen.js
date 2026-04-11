@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 const COLORS = {
   primary: '#1E40AF',
@@ -53,6 +54,14 @@ const RegisterScreen = ({ navigation }) => {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState(false);
+
+  // Called when user selects a Google Places suggestion
+  const handleAddressSelect = ({ street: s, city: c, state: st, zip: z }) => {
+    if (s) setStreet(s);
+    if (c) setCity(c);
+    if (st) setState(st);
+    if (z) setZip(z);
+  };
 
   // Refs for keyboard next
   const phoneRef     = useRef(null);
@@ -177,19 +186,14 @@ const RegisterScreen = ({ navigation }) => {
         <Text style={[styles.sectionLabel, { marginTop: 8 }]}>MAILING ADDRESS</Text>
         <Text style={styles.sectionHint}>Used for generating dispute letters</Text>
 
-        <Field label="Street Address *">
-          <TextInput
-            ref={streetRef}
-            style={styles.input}
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Street Address *</Text>
+          <AddressAutocomplete
+            initialValue={street}
             placeholder="123 Main St, Apt 4B"
-            placeholderTextColor={COLORS.textSecondary}
-            value={street}
-            onChangeText={setStreet}
-            autoCapitalize="words"
-            returnKeyType="next"
-            onSubmitEditing={() => cityRef.current?.focus()}
+            onSelect={handleAddressSelect}
           />
-        </Field>
+        </View>
 
         <View style={styles.row}>
           <View style={styles.rowFlex2}>

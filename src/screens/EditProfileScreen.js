@@ -9,10 +9,10 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const COLORS = {
   primary: '#1E40AF',
@@ -45,6 +45,14 @@ const EditProfileScreen = ({ navigation }) => {
   const [city,      setCity]      = useState(meta.address_city ?? '');
   const [stateVal,  setStateVal]  = useState(meta.address_state ?? '');
   const [zip,       setZip]       = useState(meta.address_zip ?? '');
+
+  // Called when user selects a Google Places suggestion
+  const handleAddressSelect = ({ street: s, city: c, state: st, zip: z }) => {
+    if (s) setStreet(s);
+    if (c) setCity(c);
+    if (st) setStateVal(st);
+    if (z) setZip(z);
+  };
 
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
@@ -154,19 +162,14 @@ const EditProfileScreen = ({ navigation }) => {
           <Text style={[styles.sectionLabel, { marginTop: 8 }]}>MAILING ADDRESS</Text>
           <Text style={styles.sectionHint}>Used to pre-fill your dispute letters</Text>
 
-          <Field label="Street Address">
-            <TextInput
-              ref={streetRef}
-              style={styles.input}
-              value={street}
-              onChangeText={setStreet}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.label}>Street Address</Text>
+            <AddressAutocomplete
+              initialValue={street}
               placeholder="123 Main St, Apt 4B"
-              placeholderTextColor={COLORS.textSecondary}
-              autoCapitalize="words"
-              returnKeyType="next"
-              onSubmitEditing={() => cityRef.current?.focus()}
+              onSelect={handleAddressSelect}
             />
-          </Field>
+          </View>
 
           <View style={styles.row}>
             <View style={styles.rowFlex2}>
