@@ -217,6 +217,37 @@ const DashboardScreen = ({ navigation }) => {
         )}
       </TouchableOpacity>
 
+      {/* ── Budget Snapshot ──────────────────────────────────────────────── */}
+      {budget && (
+        <View style={styles.sectionPad}>
+          <SectionHeader title="Budget Snapshot" onSeeAll={() => navigation.navigate('Budget')} />
+          <TouchableOpacity style={styles.budgetCard} onPress={() => navigation.navigate('Budget')}>
+            <View style={styles.budgetRow}>
+              <View style={styles.budgetItem}>
+                <Text style={styles.budgetItemLabel}>Income</Text>
+                <Text style={[styles.budgetItemValue, { color: COLORS.growthGreen }]}>
+                  ${monthlyIncome.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.budgetDivider} />
+              <View style={styles.budgetItem}>
+                <Text style={styles.budgetItemLabel}>Expenses</Text>
+                <Text style={[styles.budgetItemValue, { color: COLORS.errorRed }]}>
+                  ${monthlyExpenses.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.budgetDivider} />
+              <View style={styles.budgetItem}>
+                <Text style={styles.budgetItemLabel}>For Debt</Text>
+                <Text style={[styles.budgetItemValue, { color: forDebt >= 0 ? COLORS.staminaBlue : COLORS.errorRed }]}>
+                  ${forDebt.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Account Health Grid ──────────────────────────────────────────── */}
       <View style={styles.sectionPad}>
         <SectionHeader title="Account Health" onSeeAll={() => navigation.navigate('Accounts')} />
@@ -322,37 +353,6 @@ const DashboardScreen = ({ navigation }) => {
           <QuickActionTile emoji="📈" label="Activity"  color={COLORS.staminaBlue} onPress={() => navigation.navigate('Activity')} />
         </View>
       </View>
-
-      {/* ── Budget Snapshot ──────────────────────────────────────────────── */}
-      {budget && (
-        <View style={styles.sectionPad}>
-          <SectionHeader title="Budget Snapshot" onSeeAll={() => navigation.navigate('Budget')} />
-          <TouchableOpacity style={styles.budgetCard} onPress={() => navigation.navigate('Budget')}>
-            <View style={styles.budgetRow}>
-              <View style={styles.budgetItem}>
-                <Text style={styles.budgetItemLabel}>Income</Text>
-                <Text style={[styles.budgetItemValue, { color: COLORS.growthGreen }]}>
-                  ${monthlyIncome.toLocaleString()}
-                </Text>
-              </View>
-              <View style={styles.budgetDivider} />
-              <View style={styles.budgetItem}>
-                <Text style={styles.budgetItemLabel}>Expenses</Text>
-                <Text style={[styles.budgetItemValue, { color: COLORS.errorRed }]}>
-                  ${monthlyExpenses.toLocaleString()}
-                </Text>
-              </View>
-              <View style={styles.budgetDivider} />
-              <View style={styles.budgetItem}>
-                <Text style={styles.budgetItemLabel}>For Debt</Text>
-                <Text style={[styles.budgetItemValue, { color: forDebt >= 0 ? COLORS.staminaBlue : COLORS.errorRed }]}>
-                  ${forDebt.toLocaleString()}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* ── Quick Wins Modal ─────────────────────────────────────────────── */}
       <QuickWinsModal
