@@ -1,17 +1,3 @@
-/**
- * AddressAutocomplete
- *
- * Calls /api/places/autocomplete and /api/places/details on the Railway backend
- * which proxies to Google Places using the server-side API key.
- * No Google API key needed in the mobile app.
- *
- * Props:
- *   initialValue  {string}    pre-fill the text input
- *   onSelect      {Function}  called with { street, city, state, zip }
- *   placeholder   {string}
- *   style         {object}    extra style for the outer container
- */
-
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
@@ -32,7 +18,6 @@ const COLORS = {
   purple: '#7C3AED',
 };
 
-// Pull a specific component type out of Google's address_components array
 const getComponent = (components, type, useShort = false) => {
   const found = (components || []).find(c => c.types?.includes(type));
   return found ? (useShort ? found.short_name : found.long_name) : '';
@@ -54,13 +39,13 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
     setLoading(true);
     try {
       const res = await placesAPI.autocomplete(input);
-      // Backend may return { predictions: [...] } or the raw Google response
-      const preds = res.data?.predictions ?? res.data ?? [];
+      const preds = Array.isArray(res.data?.predictions)
+        ? res.data.predictions
+        : Array.isArray(res.data) ? res.data : [];
       setPredictions(preds);
       setShowList(preds.length > 0);
     } catch (err) {
       console.error('[AddressAutocomplete] autocomplete error:', err?.response?.data || err.message);
-      // Silently fail — the user can still type the address manually
     } finally {
       setLoading(false);
     }
@@ -73,14 +58,13 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
   };
 
   const handleSelectPrediction = async (prediction) => {
-    const mainText = prediction.structured_formatting?.main_text ?? prediction.description;
+    const mainText = prediction.structured_formatting?.main_text ?? prediction.description ?? '';
     setText(mainText);
     setShowList(false);
     setPredictions([]);
 
     try {
       const res = await placesAPI.details(prediction.place_id);
-      // Backend may return { result: { address_components: [...] } } or the raw Google response
       const components = res.data?.result?.address_components
                       ?? res.data?.address_components
                       ?? [];
@@ -95,10 +79,10 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
       const zip          = getComponent(components, 'postal_code');
 
       setText(street);
-      onSelect?.({ street, city, state, zip });
+      if (onSelect) onSelect({ street, city, state, zip });
     } catch (err) {
       console.error('[AddressAutocomplete] details error:', err?.response?.data || err.message);
-      onSelect?.({ street: mainText, city: '', state: '', zip: '' });
+      if (onSelect) onSelect({ street: mainText, city: '', state: '', zip: '' });
     }
   };
 
@@ -131,18 +115,21 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
           {predictions.map((pred, idx) => (
             <TouchableOpacity
               key={pred.place_id ?? String(idx)}
-              style={[styles.predictionRow, idx < predictions.length - 1 && styles.predictionBorder]}
+              style={[
+                styles.predictionRow,
+                idx < predictions.length - 1 && styles.predictionBorder,
+              ]}
               onPress={() => handleSelectPrediction(pred)}
               activeOpacity={0.7}
             >
               <Text style={styles.predMain} numberOfLines={1}>
                 {pred.structured_formatting?.main_text ?? pred.description}
               </Text>
-              {pred.structured_formatting?.secondary_text ? (
+              {!!pred.structured_formatting?.secondary_text && (
                 <Text style={styles.predSub} numberOfLines={1}>
                   {pred.structured_formatting.secondary_text}
                 </Text>
-              ) : null}
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -153,7 +140,6 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
 
 const styles = StyleSheet.create({
   wrapper: {
-    position: 'relative',
     zIndex: 999,
   },
   inputRow: {
@@ -175,10 +161,6 @@ const styles = StyleSheet.create({
     right: 14,
   },
   dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
