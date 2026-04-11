@@ -331,14 +331,26 @@ const ScoreScreen = () => {
     }
     try {
       setSaving(true);
-      await scoresAPI.add(newBureau, scoreNum, new Date().toISOString(), newNotes);
+      // recorded_date as YYYY-MM-DD; notes as null when empty so backend doesn't reject ''
+      await scoresAPI.add(
+        newBureau,
+        scoreNum,
+        new Date().toISOString().split('T')[0],
+        newNotes.trim() || null
+      );
       setLogModalVisible(false);
       setNewScore('');
       setNewNotes('');
       await fetchScores();
     } catch (err) {
-      Alert.alert('Error', 'Failed to save score. Please try again.');
-      console.error(err);
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.response?.data ||
+        err?.message ||
+        'Failed to save score';
+      console.error('[ScoreScreen] add score error:', err?.response?.status, msg);
+      Alert.alert('Error saving score', String(msg));
     } finally {
       setSaving(false);
     }
