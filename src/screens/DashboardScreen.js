@@ -61,11 +61,11 @@ const SectionHeader = ({ title, onSeeAll }) => (
   </View>
 );
 
-const StatCard = ({ value, label, color, bg }) => (
-  <View style={[styles.statCard, { backgroundColor: bg }]}>
+const StatCard = ({ value, label, color, bg, onPress }) => (
+  <TouchableOpacity style={[styles.statCard, { backgroundColor: bg }]} onPress={onPress} activeOpacity={0.7}>
     <Text style={[styles.statValue, { color }]}>{value}</Text>
     <Text style={styles.statLabel}>{label}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 const QuickActionTile = ({ emoji, label, color, onPress }) => (
@@ -271,24 +271,28 @@ const DashboardScreen = ({ navigation }) => {
             label="Total Accounts"
             color={COLORS.staminaBlue}
             bg={COLORS.staminaBlue + '18'}
+            onPress={() => navigation.navigate('Accounts')}
           />
           <StatCard
             value={damageAccounts}
             label="Active Damage"
             color={COLORS.errorRed}
             bg={COLORS.errorRed + '18'}
+            onPress={() => navigation.navigate('Accounts')}
           />
           <StatCard
             value={removableAccounts}
             label="Removable"
             color={COLORS.alertAmber}
             bg={COLORS.alertAmber + '18'}
+            onPress={() => navigation.navigate('Accounts')}
           />
           <StatCard
             value={monitorAccounts}
             label="Aging / Monitor"
             color={COLORS.growthGreen}
             bg={COLORS.growthGreen + '18'}
+            onPress={() => navigation.navigate('Accounts')}
           />
         </View>
       </View>
@@ -336,7 +340,12 @@ const DashboardScreen = ({ navigation }) => {
             const pColor = getPriorityColor(action.priority);
             const pLabel = getPriorityLabel(action.priority);
             return (
-              <View key={action.id || index} style={styles.actionCard}>
+              <TouchableOpacity
+                key={action.id || index}
+                style={styles.actionCard}
+                onPress={() => navigation.navigate('Actions')}
+                activeOpacity={0.7}
+              >
                 <View style={[styles.priorityBadge, { backgroundColor: pColor + '22', borderColor: pColor + '55' }]}>
                   <Text style={[styles.priorityText, { color: pColor }]}>{pLabel}</Text>
                 </View>
@@ -349,7 +358,7 @@ const DashboardScreen = ({ navigation }) => {
                     {action.lane?.replace('Active ', '') || '—'}
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
