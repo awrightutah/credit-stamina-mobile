@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { accountsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -33,6 +34,7 @@ const COLORS = {
 };
 
 const AccountsScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accounts, setAccounts] = useState([]);
@@ -53,8 +55,10 @@ const AccountsScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+    if (user?.id) {
+      fetchAccounts();
+    }
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

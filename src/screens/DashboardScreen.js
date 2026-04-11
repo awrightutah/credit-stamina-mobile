@@ -73,8 +73,10 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user?.id) {
+      fetchData();
+    }
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

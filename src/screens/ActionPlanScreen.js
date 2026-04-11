@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { aiAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -36,6 +37,7 @@ const COLORS = {
 };
 
 const ActionPlanScreen = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [plan, setPlan] = useState(null);
@@ -47,10 +49,21 @@ const ActionPlanScreen = () => {
       setLoading(true);
       setError(null);
       const response = await aiAPI.getActionPlan();
-      setPlan(response.data || response);
+      const raw = response.data || response;
+      console.log('[ActionPlan] raw response:', JSON.stringify(raw, null, 2));
+
+      // Normalise common backend shapes into what the UI expects
+      const plan =
+        raw?.plan ||          // { plan: { days1to30, ... } }
+        raw?.action_plan ||   // { action_plan: { ... } }
+        raw?.data ||          // { data: { ... } }
+        raw;                  // already flat
+
+      console.log('[ActionPlan] normalised plan keys:', Object.keys(plan || {}));
+      setPlan(plan);
     } catch (err) {
-      console.error('Error fetching action plan:', err);
-      setError('Failed to load action plan');
+      console.error('[ActionPlan] error:', err?.response?.data || err.message);
+      setError(err?.response?.data?.error || err?.response?.data?.message || 'Failed to load action plan');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -58,8 +71,10 @@ const ActionPlanScreen = () => {
   };
 
   useEffect(() => {
-    fetchPlan();
-  }, []);
+    if (user?.id) {
+      fetchPlan();
+    }
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -217,9 +232,9 @@ const ActionPlanScreen = () => {
         {!plan?.days1to30 && !plan?.days31to60 && !plan?.days61to90 && !plan?.tasks && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>No Action Plan Yet</Text>
+            <Text style={styles.emptyTitle}>No Credit Reports Found</Text>
             <Text style={styles.emptyText}>
-              Upload a credit report to generate your personalized action plan
+              Your account has no credit reports on file. Go to the Upload tab and import a PDF credit report — the AI will then generate your personalized plan.
             </Text>
           </View>
         )}

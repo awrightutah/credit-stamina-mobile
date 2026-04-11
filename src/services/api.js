@@ -181,7 +181,7 @@ export const lettersAPI = {
   },
   
   generate: async (data) => {
-    return api.post('/api/letters/generate', data);
+    return api.post('/api/letters/generate', data, { timeout: 120000 });
   },
 };
 
@@ -216,9 +216,9 @@ export const aiAPI = {
     return api.post('/api/ai-next-steps/complete', { actionId });
   },
   
-  // 30/60/90 Day Action Plan
+  // 30/60/90 Day Action Plan (AI generation can take up to 2 minutes)
   getActionPlan: async () => {
-    return api.post('/api/action-plan', {});
+    return api.post('/api/action-plan', {}, { timeout: 120000 });
   },
   
   // Score Prediction
