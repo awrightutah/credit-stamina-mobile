@@ -121,6 +121,24 @@ export const creditReportsAPI = {
   delete: async (id) => {
     return api.delete(`/api/credit-reports/${id}`);
   },
+  
+  // Upload and parse credit report PDF with AI
+  upload: async (formData, onProgress) => {
+    const config = {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress) {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          onProgress(percentCompleted);
+        }
+      },
+    };
+    return api.post('/api/upload-pdf', formData, config);
+  },
 };
 
 // ============================================
@@ -176,12 +194,36 @@ export const aiAPI = {
     return api.post('/api/ai-advisor', { message });
   },
   
+  askQuestion: async (data) => {
+    return api.post('/api/ai-advisor', data);
+  },
+  
   getScoreTips: async (currentScore, targetTier, pointsNeeded) => {
     return api.post('/api/score-improvement-tips', {
       current_score: currentScore,
       target_tier: targetTier,
       points_needed: pointsNeeded,
     });
+  },
+  
+  // Quick Wins - AI analysis of accounts for quick actions
+  getQuickWins: async () => {
+    return api.post('/api/ai-next-steps', { limit: 10 });
+  },
+  
+  // Complete a quick win action
+  completeAction: async (actionId) => {
+    return api.post('/api/ai-next-steps/complete', { actionId });
+  },
+  
+  // 30/60/90 Day Action Plan
+  getActionPlan: async () => {
+    return api.post('/api/action-plan', {});
+  },
+  
+  // Score Prediction
+  predictScore: async (improvements) => {
+    return api.post('/api/score-prediction', { improvements });
   },
 };
 
@@ -236,6 +278,73 @@ export const smsAPI = {
   
   confirmVerification: async (code) => {
     return api.post('/api/sms/confirm', { code });
+  },
+};
+
+// ============================================
+// BUDGET ENDPOINTS
+// ============================================
+
+export const budgetAPI = {
+  get: async () => {
+    return api.get('/api/budget');
+  },
+  
+  create: async (data) => {
+    return api.post('/api/budget', data);
+  },
+  
+  update: async (data) => {
+    return api.put('/api/budget', data);
+  },
+  
+  getPaymentPlans: async () => {
+    return api.get('/api/budget/payment-plans');
+  },
+  
+  createPaymentPlan: async (data) => {
+    return api.post('/api/budget/payment-plans', data);
+  },
+};
+
+// ============================================
+// DISPUTE TRACKER ENDPOINTS
+// ============================================
+
+export const disputesAPI = {
+  getCounts: async () => {
+    return api.get('/api/dispute-counts');
+  },
+};
+
+// ============================================
+// NOTES ENDPOINTS
+// ============================================
+
+export const notesAPI = {
+  getForAccount: async (accountId) => {
+    return api.get(`/api/accounts/${accountId}/notes`);
+  },
+  
+  create: async (accountId, content) => {
+    return api.post(`/api/accounts/${accountId}/notes`, { content });
+  },
+  
+  delete: async (noteId) => {
+    return api.delete(`/api/accounts/notes/${noteId}`);
+  },
+};
+
+// ============================================
+// ACTIVITY TIMELINE ENDPOINTS
+// ============================================
+
+export const activityAPI = {
+  getTimeline: async () => {
+    return api.get('/api/activity-timeline');
+  },
+  getAll: async () => {
+    return api.get('/api/activity-timeline');
   },
 };
 

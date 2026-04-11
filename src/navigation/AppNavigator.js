@@ -18,6 +18,13 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AIAdvisorScreen from '../screens/AIAdvisorScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
+// New AI-powered screens
+import UploadScreen from '../screens/UploadScreen';
+import ActionPlanScreen from '../screens/ActionPlanScreen';
+import BudgetScreen from '../screens/BudgetScreen';
+import ScoreSimulatorScreen from '../screens/ScoreSimulatorScreen';
+import ActivityScreen from '../screens/ActivityScreen';
+
 // Colors
 const COLORS = {
   primary: '#3B82F6',
@@ -141,6 +148,13 @@ const AppNavigator = () => {
           <Stack.Screen name="Letters" component={LettersScreen} />
           <Stack.Screen name="AIAdvisor" component={AIAdvisorScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          
+          {/* New AI-powered screens */}
+          <Stack.Screen name="Upload" component={UploadScreen} />
+          <Stack.Screen name="ActionPlan" component={ActionPlanScreen} />
+          <Stack.Screen name="Budget" component={BudgetScreen} />
+          <Stack.Screen name="ScoreSimulator" component={ScoreSimulatorScreen} />
+          <Stack.Screen name="Activity" component={ActivityScreen} />
         </Stack.Navigator>
       ) : (
         <AuthStack />

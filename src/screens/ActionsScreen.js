@@ -11,16 +11,22 @@ import {
 import { actionsAPI } from '../services/api';
 
 const COLORS = {
-  primary: '#3B82F6',
-  secondary: '#10B981',
-  background: '#0F172A',
-  card: '#1E293B',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  border: '#334155',
-  danger: '#EF4444',
-  warning: '#F59E0B',
-  success: '#10B981',
+  // Credit Stamina Brand Colors (matching PWA)
+  staminaBlue: '#1E40AF',
+  powerPurple: '#7C3AED',
+  primary: '#1E40AF',
+  secondary: '#059669',
+  growthGreen: '#059669',
+  alertAmber: '#D97706',
+  errorRed: '#DC2626',
+  background: '#0f172a',
+  card: '#111827',
+  text: '#FFFFFF',
+  textSecondary: '#6B7280',
+  border: '#374151',
+  danger: '#DC2626',
+  warning: '#D97706',
+  success: '#059669',
 };
 
 const ActionsScreen = ({ navigation }) => {

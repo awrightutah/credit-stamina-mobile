@@ -7,24 +7,35 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { accountsAPI, actionsAPI, scoresAPI, pointsAPI } from '../services/api';
+import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, aiAPI, budgetAPI } from '../services/api';
+import QuickWinsModal from '../components/QuickWinsModal';
 
 const COLORS = {
-  primary: '#3B82F6',
-  secondary: '#10B981',
-  background: '#0F172A',
-  card: '#1E293B',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  border: '#334155',
-  danger: '#EF4444',
-  warning: '#F59E0B',
-  success: '#10B981',
-  damage: '#EF4444',
-  removable: '#F59E0B',
-  monitor: '#10B981',
+  // Credit Stamina Brand Colors (matching PWA)
+  staminaBlue: '#1E40AF',
+  powerPurple: '#7C3AED',
+  primary: '#1E40AF',
+  secondary: '#059669',
+  growthGreen: '#059669',
+  alertAmber: '#D97706',
+  errorRed: '#DC2626',
+  background: '#0f172a',
+  card: '#111827',
+  darkCharcoal: '#111827',
+  text: '#FFFFFF',
+  textSecondary: '#6B7280',
+  mediumGray: '#6B7280',
+  border: '#374151',
+  danger: '#DC2626',
+  warning: '#D97706',
+  success: '#059669',
+  damage: '#DC2626',
+  removable: '#D97706',
+  monitor: '#059669',
+  purple: '#7C3AED',
 };
 
 const DashboardScreen = ({ navigation }) => {
@@ -35,20 +46,24 @@ const DashboardScreen = ({ navigation }) => {
   const [actions, setActions] = useState([]);
   const [scores, setScores] = useState([]);
   const [points, setPoints] = useState(0);
+  const [budget, setBudget] = useState(null);
+  const [quickWinsVisible, setQuickWinsVisible] = useState(false);
 
   const fetchData = async () => {
     try {
-      const [accountsRes, actionsRes, scoresRes, pointsRes] = await Promise.all([
+      const [accountsRes, actionsRes, scoresRes, pointsRes, budgetRes] = await Promise.all([
         accountsAPI.getAll(),
         actionsAPI.getAll('Pending'),
         scoresAPI.getAll(),
         pointsAPI.get(),
+        budgetAPI.get().catch(() => ({ data: null })),
       ]);
 
       setAccounts(accountsRes.data || []);
       setActions(actionsRes.data || []);
       setScores(scoresRes.data || []);
       setPoints(pointsRes.data?.points || 0);
+      setBudget(budgetRes.data || null);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -73,6 +88,11 @@ const DashboardScreen = ({ navigation }) => {
   const monitorAccounts = accounts.filter(a => a.lane === 'Aging/Monitor').length;
   const pendingActions = actions.length;
   const latestScore = scores.length > 0 ? scores[scores.length - 1].score : null;
+
+  // Budget calculations
+  const monthlyIncome = budget?.monthly_income || 0;
+  const monthlyExpenses = budget?.monthly_expenses || 0;
+  const availableForDebt = monthlyIncome - monthlyExpenses;
 
   if (loading) {
     return (
@@ -116,6 +136,56 @@ const DashboardScreen = ({ navigation }) => {
         </View>
       )}
 
+      {/* AI Quick Wins Button */}
+      <TouchableOpacity 
+        style={styles.quickWinsButton}
+        onPress={() => setQuickWinsVisible(true)}
+      >
+        <View style={styles.quickWinsContent}>
+          <Text style={styles.quickWinsEmoji}>🤖</Text>
+          <View style={styles.quickWinsText}>
+            <Text style={styles.quickWinsTitle}>Quick Wins</Text>
+            <Text style={styles.quickWinsSubtitle}>AI-powered next steps</Text>
+          </View>
+        </View>
+        <Text style={styles.quickWinsArrow}>→</Text>
+      </TouchableOpacity>
+
+      {/* Budget Snapshot Widget */}
+      {budget && (
+        <TouchableOpacity 
+          style={styles.budgetWidget}
+          onPress={() => navigation.navigate('Budget')}
+        >
+          <View style={styles.budgetHeader}>
+            <Text style={styles.budgetTitle}>💰 Budget Snapshot</Text>
+            <Text style={styles.budgetSeeAll}>Details →</Text>
+          </View>
+          <View style={styles.budgetRow}>
+            <View style={styles.budgetItem}>
+              <Text style={styles.budgetLabel}>Income</Text>
+              <Text style={[styles.budgetValue, { color: COLORS.success }]}>
+                ${monthlyIncome.toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.budgetDivider} />
+            <View style={styles.budgetItem}>
+              <Text style={styles.budgetLabel}>Expenses</Text>
+              <Text style={[styles.budgetValue, { color: COLORS.danger }]}>
+                ${monthlyExpenses.toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.budgetDivider} />
+            <View style={styles.budgetItem}>
+              <Text style={styles.budgetLabel}>For Debt</Text>
+              <Text style={[styles.budgetValue, { color: COLORS.primary }]}>
+                ${availableForDebt.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Quick Stats */}
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { borderLeftColor: COLORS.danger }]}>
@@ -142,10 +212,30 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.quickActions}>
           <TouchableOpacity 
             style={styles.quickActionButton}
+            onPress={() => navigation.navigate('Upload')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: COLORS.purple }]}>
+              <Text style={styles.quickActionIconText}>📄</Text>
+            </View>
+            <Text style={styles.quickActionText}>Upload Report</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={() => navigation.navigate('ActionPlan')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: COLORS.success }]}>
+              <Text style={styles.quickActionIconText}>📋</Text>
+            </View>
+            <Text style={styles.quickActionText}>30/60/90 Plan</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.quickActionButton}
             onPress={() => navigation.navigate('Actions')}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primary }]}>
-              <Text style={styles.quickActionIconText}>📋</Text>
+              <Text style={styles.quickActionIconText}>✅</Text>
             </View>
             <Text style={styles.quickActionText}>View Tasks</Text>
           </TouchableOpacity>
@@ -194,7 +284,7 @@ const DashboardScreen = ({ navigation }) => {
           {actions.slice(0, 3).map((action, index) => (
             <View key={action.id || index} style={styles.actionItem}>
               <View style={[styles.actionPriority, { 
-                backgroundColor: action.priority === 1 ? COLORS.danger : 
+                backgroundColor: action.priority === 1 ? COLORS.danger :
                                 action.priority === 2 ? COLORS.warning : COLORS.success 
               }]} />
               <View style={styles.actionContent}>
@@ -206,6 +296,13 @@ const DashboardScreen = ({ navigation }) => {
           ))}
         </View>
       )}
+
+      {/* Quick Wins Modal */}
+      <QuickWinsModal
+        visible={quickWinsVisible}
+        onClose={() => setQuickWinsVisible(false)}
+        onComplete={fetchData}
+      />
     </ScrollView>
   );
 };
@@ -293,6 +390,86 @@ const styles = StyleSheet.create({
   scoreRangeText: {
     fontSize: 12,
     color: COLORS.textSecondary,
+  },
+  quickWinsButton: {
+    backgroundColor: COLORS.card,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.purple,
+  },
+  quickWinsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quickWinsEmoji: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  quickWinsText: {
+    flex: 1,
+  },
+  quickWinsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  quickWinsSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  quickWinsArrow: {
+    fontSize: 24,
+    color: COLORS.purple,
+  },
+  budgetWidget: {
+    backgroundColor: COLORS.card,
+    margin: 20,
+    marginTop: 12,
+    borderRadius: 16,
+    padding: 16,
+  },
+  budgetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  budgetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  budgetSeeAll: {
+    fontSize: 14,
+    color: COLORS.primary,
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  budgetItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  budgetDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.border,
+  },
+  budgetLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  budgetValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   statsGrid: {
     flexDirection: 'row',
