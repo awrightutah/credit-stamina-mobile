@@ -9,12 +9,13 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { accountsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
-  // Credit Stamina Brand Colors (matching PWA)
   staminaBlue: '#1E40AF',
   powerPurple: '#7C3AED',
   primary: '#1E40AF',
@@ -24,6 +25,7 @@ const COLORS = {
   errorRed: '#DC2626',
   background: '#0f172a',
   card: '#111827',
+  surface: '#1e293b',
   text: '#FFFFFF',
   textSecondary: '#6B7280',
   border: '#374151',
@@ -33,21 +35,183 @@ const COLORS = {
   purple: '#7C3AED',
 };
 
+const LANES = [
+  { key: 'all', label: 'All', color: COLORS.primary },
+  { key: 'Active Damage', label: 'Active Damage', color: COLORS.danger },
+  { key: 'Removable', label: 'Removable', color: COLORS.warning },
+  { key: 'Aging/Monitor', label: 'Monitor', color: COLORS.success },
+];
+
+const getLaneColor = (lane) => {
+  switch (lane) {
+    case 'Active Damage': return COLORS.danger;
+    case 'Removable': return COLORS.warning;
+    case 'Aging/Monitor': return COLORS.success;
+    default: return COLORS.textSecondary;
+  }
+};
+
+const formatCurrency = (amount) => {
+  if (!amount && amount !== 0) return 'N/A';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+};
+
+// ─── Account Card ─────────────────────────────────────────────────────────────
+const AccountCard = ({ item, onPress }) => {
+  const laneColor = getLaneColor(item.lane);
+  return (
+    <TouchableOpacity style={[styles.accountCard, { borderLeftColor: laneColor }]} onPress={() => onPress(item)} activeOpacity={0.7}>
+      <View style={styles.accountHeader}>
+        <View style={styles.accountInfo}>
+          <Text style={styles.creditorName} numberOfLines={1}>
+            {item.creditor || item.account_name || 'Unknown Account'}
+          </Text>
+          <Text style={styles.accountType}>{item.account_type || 'Account'}</Text>
+        </View>
+        <View style={[styles.laneBadge, { backgroundColor: laneColor + '20', borderColor: laneColor + '40' }]}>
+          <Text style={[styles.laneText, { color: laneColor }]}>
+            {item.lane || 'Unknown'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.accountDetails}>
+        <View style={styles.detailItem}>
+          <Text style={styles.detailLabel}>Balance</Text>
+          <Text style={styles.detailValue}>{formatCurrency(item.current_balance ?? item.balance)}</Text>
+        </View>
+        <View style={styles.detailDivider} />
+        <View style={styles.detailItem}>
+          <Text style={styles.detailLabel}>Past Due</Text>
+          <Text style={[styles.detailValue, item.past_due_amount > 0 && { color: COLORS.danger }]}>
+            {formatCurrency(item.past_due_amount)}
+          </Text>
+        </View>
+        <View style={styles.detailDivider} />
+        <View style={styles.detailItem}>
+          <Text style={styles.detailLabel}>Bureau</Text>
+          <Text style={styles.detailValue}>{item.bureau || 'N/A'}</Text>
+        </View>
+      </View>
+
+      {item.next_action && (
+        <View style={styles.nextActionPreview}>
+          <Text style={styles.nextActionIcon}>🎯</Text>
+          <Text style={styles.nextActionText} numberOfLines={2}>{item.next_action}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+// ─── Account Detail Modal ──────────────────────────────────────────────────────
+const AccountDetailModal = ({ account, visible, onClose, onNavigateActions }) => {
+  if (!account) return null;
+  const laneColor = getLaneColor(account.lane);
+
+  return (
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Handle bar */}
+            <View style={styles.handleBar} />
+
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>{account.creditor || account.account_name}</Text>
+                <View style={[styles.laneBadgeLarge, { backgroundColor: laneColor + '20', borderColor: laneColor + '40' }]}>
+                  <Text style={[styles.laneTextLarge, { color: laneColor }]}>{account.lane}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Account Details */}
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionLabel}>ACCOUNT DETAILS</Text>
+              {[
+                { label: 'Account Type', value: account.account_type || 'N/A' },
+                { label: 'Balance', value: formatCurrency(account.current_balance ?? account.balance) },
+                { label: 'Past Due', value: formatCurrency(account.past_due_amount), danger: account.past_due_amount > 0 },
+                { label: 'Credit Limit', value: formatCurrency(account.credit_limit) },
+                { label: 'Bureau', value: account.bureau || 'N/A' },
+                { label: 'Open Date', value: account.open_date || 'N/A' },
+                { label: 'Last Reported', value: account.last_reported || 'N/A' },
+              ].map(({ label, value, danger }) => (
+                <View key={label} style={styles.detailRow}>
+                  <Text style={styles.detailLabelLeft}>{label}</Text>
+                  <Text style={[styles.detailValueRight, danger && { color: COLORS.danger }]}>{value}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* AI Recommended Action */}
+            {account.next_action && (
+              <View style={styles.aiSection}>
+                <Text style={styles.aiSectionTitle}>🎯 Recommended Action</Text>
+                <Text style={styles.aiActionText}>{account.next_action}</Text>
+              </View>
+            )}
+
+            {/* Strategy */}
+            {account.strategy && (
+              <View style={[styles.aiSection, { borderLeftColor: COLORS.staminaBlue }]}>
+                <Text style={[styles.aiSectionTitle, { color: COLORS.staminaBlue }]}>📋 Strategy</Text>
+                <Text style={styles.aiStrategyText}>{account.strategy}</Text>
+              </View>
+            )}
+
+            {/* Dispute History */}
+            {account.dispute_count > 0 && (
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>DISPUTE HISTORY</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabelLeft}>Disputes Filed</Text>
+                  <Text style={styles.detailValueRight}>{account.dispute_count}</Text>
+                </View>
+                {account.last_dispute_date && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabelLeft}>Last Disputed</Text>
+                    <Text style={styles.detailValueRight}>{account.last_dispute_date}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.takeActionButton} onPress={onNavigateActions}>
+              <Text style={styles.takeActionButtonText}>View in Action Plan</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// ─── Main Screen ───────────────────────────────────────────────────────────────
 const AccountsScreen = ({ navigation }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accounts, setAccounts] = useState([]);
-  const [filter, setFilter] = useState('all'); // all, damage, removable, monitor
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [error, setError] = useState(null);
 
   const fetchAccounts = async () => {
     try {
+      setError(null);
       const response = await accountsAPI.getAll();
       setAccounts(response.data || []);
-    } catch (error) {
-      console.error('Error fetching accounts:', error);
+    } catch (err) {
+      console.error('Error fetching accounts:', err);
+      setError('Failed to load accounts');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -65,279 +229,138 @@ const AccountsScreen = ({ navigation }) => {
     fetchAccounts();
   }, []);
 
-  const getFilteredAccounts = () => {
-    if (filter === 'all') return accounts;
-    if (filter === 'damage') return accounts.filter(a => a.lane === 'Active Damage');
-    if (filter === 'removable') return accounts.filter(a => a.lane === 'Removable');
-    if (filter === 'monitor') return accounts.filter(a => a.lane === 'Aging/Monitor');
-    return accounts;
-  };
-
-  const getLaneColor = (lane) => {
-    switch (lane) {
-      case 'Active Damage': return COLORS.danger;
-      case 'Removable': return COLORS.warning;
-      case 'Aging/Monitor': return COLORS.success;
-      default: return COLORS.textSecondary;
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 1: return COLORS.danger;
-      case 2: return COLORS.warning;
-      case 3: return COLORS.success;
-      default: return COLORS.textSecondary;
-    }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount || 0);
-  };
+  const filteredAccounts = accounts.filter(a => {
+    const matchesLane = filter === 'all' || a.lane === filter;
+    const matchesSearch = !search || (a.creditor || a.account_name || '').toLowerCase().includes(search.toLowerCase());
+    return matchesLane && matchesSearch;
+  });
 
   const handleAccountPress = (account) => {
     setSelectedAccount(account);
     setModalVisible(true);
   };
 
-  const renderAccount = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.accountCard}
-      onPress={() => handleAccountPress(item)}
-    >
-      <View style={styles.accountHeader}>
-        <View style={styles.accountInfo}>
-          <Text style={styles.creditorName}>{item.creditor || item.account_name}</Text>
-          <Text style={styles.accountType}>{item.account_type}</Text>
-        </View>
-        <View style={[styles.laneBadge, { backgroundColor: getLaneColor(item.lane) + '20' }]}>
-          <Text style={[styles.laneText, { color: getLaneColor(item.lane) }]}>
-            {item.lane}
-          </Text>
-        </View>
-      </View>
-      
-      <View style={styles.accountDetails}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Balance</Text>
-          <Text style={styles.detailValue}>{formatCurrency(item.current_balance || item.balance)}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Past Due</Text>
-          <Text style={[styles.detailValue, item.past_due_amount > 0 && styles.pastDue]}>
-            {formatCurrency(item.past_due_amount)}
-          </Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Bureau</Text>
-          <Text style={styles.detailValue}>{item.bureau || 'N/A'}</Text>
-        </View>
-      </View>
-
-      {/* AI-powered next action preview */}
-      {item.next_action && (
-        <View style={styles.nextActionPreview}>
-          <Text style={styles.nextActionIcon}>🎯</Text>
-          <Text style={styles.nextActionText} numberOfLines={1}>
-            {item.next_action}
-          </Text>
-          <Text style={styles.viewDetails}>→</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+  // Lane counts
+  const counts = {
+    all: accounts.length,
+    'Active Damage': accounts.filter(a => a.lane === 'Active Damage').length,
+    'Removable': accounts.filter(a => a.lane === 'Removable').length,
+    'Aging/Monitor': accounts.filter(a => a.lane === 'Aging/Monitor').length,
+  };
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.purple} />
+          <Text style={styles.loadingText}>Loading accounts...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const filteredAccounts = getFilteredAccounts();
-  
-  // Stats
-  const damageCount = accounts.filter(a => a.lane === 'Active Damage').length;
-  const removableCount = accounts.filter(a => a.lane === 'Removable').length;
-  const monitorCount = accounts.filter(a => a.lane === 'Aging/Monitor').length;
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Accounts</Text>
-        <Text style={styles.subtitle}>{filteredAccounts.length} accounts</Text>
+        <View>
+          <Text style={styles.title}>Credit Accounts</Text>
+          <Text style={styles.subtitle}>{accounts.length} accounts tracked</Text>
+        </View>
       </View>
 
-      {/* Stats Summary */}
-      <View style={styles.statsContainer}>
-        <TouchableOpacity 
-          style={[styles.statItem, filter === 'damage' && styles.statItemActive]}
-          onPress={() => setFilter('damage')}
-        >
-          <View style={[styles.statDot, { backgroundColor: COLORS.danger }]} />
-          <Text style={styles.statNumber}>{damageCount}</Text>
-          <Text style={styles.statLabel}>Damage</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.statItem, filter === 'removable' && styles.statItemActive]}
-          onPress={() => setFilter('removable')}
-        >
-          <View style={[styles.statDot, { backgroundColor: COLORS.warning }]} />
-          <Text style={styles.statNumber}>{removableCount}</Text>
-          <Text style={styles.statLabel}>Removable</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.statItem, filter === 'monitor' && styles.statItemActive]}
-          onPress={() => setFilter('monitor')}
-        >
-          <View style={[styles.statDot, { backgroundColor: COLORS.success }]} />
-          <Text style={styles.statNumber}>{monitorCount}</Text>
-          <Text style={styles.statLabel}>Monitor</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.statItem, filter === 'all' && styles.statItemActive]}
-          onPress={() => setFilter('all')}
-        >
-          <View style={[styles.statDot, { backgroundColor: COLORS.primary }]} />
-          <Text style={styles.statNumber}>{accounts.length}</Text>
-          <Text style={styles.statLabel}>All</Text>
-        </TouchableOpacity>
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search creditors..."
+          placeholderTextColor={COLORS.textSecondary}
+          value={search}
+          onChangeText={setSearch}
+          clearButtonMode="while-editing"
+        />
       </View>
+
+      {/* Lane Filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filtersContainer}
+      >
+        {LANES.map(lane => {
+          const active = filter === lane.key;
+          const count = counts[lane.key] ?? 0;
+          return (
+            <TouchableOpacity
+              key={lane.key}
+              style={[styles.filterPill, active && { backgroundColor: lane.color, borderColor: lane.color }]}
+              onPress={() => setFilter(lane.key)}
+            >
+              <Text style={[styles.filterPillText, active && { color: '#fff' }]}>
+                {lane.label}
+              </Text>
+              <View style={[styles.filterCount, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                <Text style={[styles.filterCountText, active && { color: '#fff' }]}>{count}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {/* Account List */}
       <FlatList
         data={filteredAccounts}
-        renderItem={renderAccount}
-        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+        renderItem={({ item }) => <AccountCard item={item} onPress={handleAccountPress} />}
+        keyExtractor={(item) => item.id?.toString() ?? `${item.creditor}-${Math.random()}`}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📄</Text>
-            <Text style={styles.emptyText}>No accounts found</Text>
-            <Text style={styles.emptySubtext}>
-              Upload a credit report to see your accounts
-            </Text>
-            <TouchableOpacity 
-              style={styles.uploadButton}
-              onPress={() => navigation.navigate('Upload')}
-            >
-              <Text style={styles.uploadButtonText}>Upload Credit Report</Text>
-            </TouchableOpacity>
+            {error ? (
+              <>
+                <Text style={styles.emptyIcon}>⚠️</Text>
+                <Text style={styles.emptyText}>{error}</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={fetchAccounts}>
+                  <Text style={styles.primaryButtonText}>Try Again</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyIcon}>📄</Text>
+                <Text style={styles.emptyTitle}>No Accounts Found</Text>
+                <Text style={styles.emptySubtext}>
+                  {search || filter !== 'all'
+                    ? 'Try a different filter or search term'
+                    : 'Upload a credit report to see your accounts'}
+                </Text>
+                {!search && filter === 'all' && (
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={() => navigation.navigate('Upload')}
+                  >
+                    <Text style={styles.primaryButtonText}>Upload Credit Report</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
         }
       />
 
-      {/* Account Detail Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      {/* Detail Modal */}
+      <AccountDetailModal
+        account={selectedAccount}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedAccount && (
-              <ScrollView>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.closeButtonText}>✕</Text>
-                </TouchableOpacity>
-
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{selectedAccount.creditor || selectedAccount.account_name}</Text>
-                  <View style={[styles.laneBadgeLarge, { backgroundColor: getLaneColor(selectedAccount.lane) + '20' }]}>
-                    <Text style={[styles.laneTextLarge, { color: getLaneColor(selectedAccount.lane) }]}>
-                      {selectedAccount.lane}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={styles.sectionLabel}>Account Details</Text>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabelLeft}>Account Type</Text>
-                    <Text style={styles.detailValueRight}>{selectedAccount.account_type || 'N/A'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabelLeft}>Balance</Text>
-                    <Text style={styles.detailValueRight}>{formatCurrency(selectedAccount.current_balance || selectedAccount.balance)}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabelLeft}>Past Due</Text>
-                    <Text style={[styles.detailValueRight, selectedAccount.past_due_amount > 0 && styles.pastDue]}>
-                      {formatCurrency(selectedAccount.past_due_amount)}
-                    </Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabelLeft}>Credit Limit</Text>
-                    <Text style={styles.detailValueRight}>{formatCurrency(selectedAccount.credit_limit)}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabelLeft}>Bureau</Text>
-                    <Text style={styles.detailValueRight}>{selectedAccount.bureau || 'N/A'}</Text>
-                  </View>
-                </View>
-
-                {/* AI-powered insights */}
-                {selectedAccount.next_action && (
-                  <View style={styles.aiSection}>
-                    <Text style={styles.aiSectionTitle}>🎯 Recommended Action</Text>
-                    <Text style={styles.aiActionText}>{selectedAccount.next_action}</Text>
-                  </View>
-                )}
-
-                {selectedAccount.strategy && (
-                  <View style={styles.aiSection}>
-                    <Text style={styles.aiSectionTitle}>📋 Strategy</Text>
-                    <Text style={styles.aiStrategyText}>{selectedAccount.strategy}</Text>
-                  </View>
-                )}
-
-                {selectedAccount.priority && (
-                  <View style={styles.prioritySection}>
-                    <Text style={styles.priorityLabel}>Priority</Text>
-                    <View style={styles.priorityBars}>
-                      {[1, 2, 3].map((p) => (
-                        <View 
-                          key={p}
-                          style={[
-                            styles.priorityBar,
-                            { backgroundColor: p <= selectedAccount.priority ? getPriorityColor(selectedAccount.priority) : COLORS.border }
-                          ]}
-                        />
-                      ))}
-                    </View>
-                    <Text style={styles.priorityText}>
-                      {selectedAccount.priority === 1 ? 'High' : selectedAccount.priority === 2 ? 'Medium' : 'Low'}
-                    </Text>
-                  </View>
-                )}
-
-                <TouchableOpacity 
-                  style={styles.takeActionButton}
-                  onPress={() => {
-                    setModalVisible(false);
-                    navigation.navigate('Actions');
-                  }}
-                >
-                  <Text style={styles.takeActionButtonText}>View in Actions</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </View>
+        onClose={() => setModalVisible(false)}
+        onNavigateActions={() => {
+          setModalVisible(false);
+          navigation.navigate('Actions');
+        }}
+      />
+    </SafeAreaView>
   );
 };
 
@@ -350,72 +373,108 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: COLORS.text,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
   },
-  statsContainer: {
+  searchContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  filtersContainer: {
     paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingBottom: 12,
     gap: 8,
   },
-  statItem: {
-    flex: 1,
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  filterCount: {
+    backgroundColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 20,
     alignItems: 'center',
   },
-  statItemActive: {
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  statDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  statLabel: {
+  filterCountText: {
     fontSize: 11,
+    fontWeight: '600',
     color: COLORS.textSecondary,
   },
   listContent: {
-    padding: 20,
-    paddingTop: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
+  // Account Card
   accountCard: {
     backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   accountHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   accountInfo: {
     flex: 1,
+    marginRight: 10,
   },
   creditorName: {
     fontSize: 16,
@@ -425,36 +484,45 @@ const styles = StyleSheet.create({
   accountType: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: 3,
   },
   laneBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    borderWidth: 1,
   },
   laneText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   accountDetails: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 2,
   },
   detailItem: {
+    flex: 1,
     alignItems: 'center',
   },
+  detailDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 2,
+  },
   detailLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
     marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  pastDue: {
-    color: COLORS.danger,
   },
   nextActionPreview: {
     flexDirection: 'row',
@@ -463,80 +531,93 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    gap: 8,
   },
   nextActionIcon: {
     fontSize: 14,
-    marginRight: 8,
   },
   nextActionText: {
     flex: 1,
     fontSize: 13,
     color: COLORS.textSecondary,
+    lineHeight: 18,
   },
-  viewDetails: {
-    fontSize: 14,
-    color: COLORS.primary,
+  chevron: {
+    fontSize: 22,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
   },
+  // Empty State
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 60,
+    paddingHorizontal: 24,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: 56,
     marginBottom: 16,
   },
-  emptyText: {
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: COLORS.text,
     marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: COLORS.danger,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
   },
-  uploadButton: {
+  primaryButton: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: 10,
   },
-  uploadButtonText: {
+  primaryButtonText: {
     color: COLORS.text,
     fontWeight: '600',
+    fontSize: 15,
   },
-  // Modal styles
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: COLORS.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
-    padding: 20,
+    maxHeight: '88%',
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
-  closeButton: {
-    alignSelf: 'flex-end',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: COLORS.textSecondary,
-    fontSize: 18,
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
   },
   modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginTop: 16,
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: 8,
@@ -544,29 +625,48 @@ const styles = StyleSheet.create({
   laneBadgeLarge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   laneTextLarge: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  closeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  closeButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: 16,
     fontWeight: '600',
   },
   modalSection: {
     backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   sectionLabel: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.textSecondary,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 12,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border + '60',
   },
   detailLabelLeft: {
     fontSize: 14,
@@ -578,50 +678,28 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   aiSection: {
-    backgroundColor: COLORS.purple + '20',
+    backgroundColor: COLORS.purple + '15',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.purple,
   },
   aiSectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.purple,
     marginBottom: 8,
   },
   aiActionText: {
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.text,
-    lineHeight: 22,
+    lineHeight: 21,
   },
   aiStrategyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  prioritySection: {
-    marginBottom: 16,
-  },
-  priorityLabel: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: 8,
-  },
-  priorityBars: {
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: 4,
-  },
-  priorityBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-  },
-  priorityText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+    lineHeight: 19,
   },
   takeActionButton: {
     backgroundColor: COLORS.primary,
@@ -629,7 +707,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 20,
   },
   takeActionButtonText: {
     color: COLORS.text,
