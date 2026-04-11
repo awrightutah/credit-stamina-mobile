@@ -43,6 +43,7 @@ const ActionPlanScreen = () => {
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState(null);
   const [expandedSection, setExpandedSection] = useState('days1-30');
+  const [completedTasks, setCompletedTasks] = useState(new Set());
 
   const fetchPlan = async () => {
     try {
@@ -103,42 +104,70 @@ const ActionPlanScreen = () => {
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  const renderTask = (task, index) => (
-    <View key={index} style={styles.taskCard}>
-      <View style={styles.taskHeader}>
-        <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(task.priority) }]}>
-          <Text style={styles.priorityText}>{task.priority?.toUpperCase() || 'MEDIUM'}</Text>
-        </View>
-        {/* Backend returns estimated_impact, handle both formats */}
-        {(task.estimated_impact || task.points) && (
-          <Text style={styles.pointsText}>{task.estimated_impact || `+${task.points} pts`}</Text>
-        )}
-      </View>
-      
-      <Text style={styles.taskTitle}>{task.title || task.action}</Text>
-      
-      {task.description && (
-        <Text style={styles.taskDescription}>{task.description}</Text>
-      )}
-      
-      <View style={styles.taskFooter}>
-        {/* Backend returns category, handle both dispute_type and category */}
-        {(task.category || task.dispute_type) && (
-          <View style={styles.disputeBadge}>
-            <Text style={styles.disputeText}>{(task.category || task.dispute_type).toUpperCase()}</Text>
+  const handleMarkDone = (taskKey) => {
+    setCompletedTasks(prev => {
+      const next = new Set(prev);
+      if (next.has(taskKey)) {
+        next.delete(taskKey);
+      } else {
+        next.add(taskKey);
+      }
+      return next;
+    });
+  };
+
+  const renderTask = (task, index, sectionKey) => {
+    const taskKey = `${sectionKey}-${index}`;
+    const isDone = completedTasks.has(taskKey);
+    return (
+      <View key={taskKey} style={[styles.taskCard, isDone && styles.taskCardDone]}>
+        <View style={styles.taskHeader}>
+          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(task.priority) }]}>
+            <Text style={styles.priorityText}>{task.priority?.toUpperCase() || 'MEDIUM'}</Text>
           </View>
+          {isDone && (
+            <View style={styles.doneBadge}>
+              <Text style={styles.doneBadgeText}>✓ Done</Text>
+            </View>
+          )}
+          {/* Backend returns estimated_impact, handle both formats */}
+          {!isDone && (task.estimated_impact || task.points) && (
+            <Text style={styles.pointsText}>{task.estimated_impact || `+${task.points} pts`}</Text>
+          )}
+        </View>
+
+        <Text style={[styles.taskTitle, isDone && styles.taskTitleDone]}>
+          {task.title || task.action}
+        </Text>
+
+        {task.description && (
+          <Text style={styles.taskDescription}>{task.description}</Text>
         )}
-        {/* Backend returns due_day, handle both due_day and day */}
-        {(task.due_day || task.day) && (
-          <Text style={styles.dayText}>Day {task.due_day || task.day}</Text>
-        )}
+
+        <View style={styles.taskFooter}>
+          {/* Backend returns category, handle both dispute_type and category */}
+          {(task.category || task.dispute_type) && (
+            <View style={styles.disputeBadge}>
+              <Text style={styles.disputeText}>{(task.category || task.dispute_type).toUpperCase()}</Text>
+            </View>
+          )}
+          {/* Backend returns due_day, handle both due_day and day */}
+          {(task.due_day || task.day) && (
+            <Text style={styles.dayText}>Day {task.due_day || task.day}</Text>
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.markDoneButton, isDone && styles.markDoneButtonDone]}
+          onPress={() => handleMarkDone(taskKey)}
+        >
+          <Text style={styles.markDoneText}>
+            {isDone ? '↩ Undo' : '✓ Mark Done'}
+          </Text>
+        </TouchableOpacity>
       </View>
-      
-      <TouchableOpacity style={styles.markDoneButton}>
-        <Text style={styles.markDoneText}>Mark Done</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const renderSection = (title, days, data, sectionKey) => {
     const isExpanded = expandedSection === sectionKey;
@@ -168,7 +197,7 @@ const ActionPlanScreen = () => {
         {isExpanded && (
           <View style={styles.tasksContainer}>
             {tasks.length > 0 ? (
-              tasks.map((task, index) => renderTask(task, index))
+              tasks.map((task, index) => renderTask(task, index, sectionKey))
             ) : (
               <Text style={styles.emptyText}>No tasks for this period</Text>
             )}
@@ -234,7 +263,7 @@ const ActionPlanScreen = () => {
         {/* Fallback if plan structure is different */}
         {!plan?.days1to30 && !plan?.days31to60 && !plan?.days61to90 && plan?.tasks && (
           <View style={styles.section}>
-            {plan.tasks.map((task, index) => renderTask(task, index))}
+            {plan.tasks.map((task, index) => renderTask(task, index, 'tasks'))}
           </View>
         )}
 
@@ -447,11 +476,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
   },
+  taskCardDone: {
+    opacity: 0.6,
+  },
+  taskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: COLORS.textSecondary,
+  },
+  doneBadge: {
+    backgroundColor: COLORS.success + '25',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  doneBadgeText: {
+    fontSize: 11,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
   markDoneButton: {
     backgroundColor: COLORS.success,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  markDoneButtonDone: {
+    backgroundColor: COLORS.border,
   },
   markDoneText: {
     color: COLORS.text,
