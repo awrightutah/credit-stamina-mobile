@@ -52,15 +52,20 @@ const ActionPlanScreen = () => {
       const raw = response.data || response;
       console.log('[ActionPlan] raw response:', JSON.stringify(raw, null, 2));
 
-      // Normalise common backend shapes into what the UI expects
-      const plan =
-        raw?.plan ||          // { plan: { days1to30, ... } }
-        raw?.action_plan ||   // { action_plan: { ... } }
-        raw?.data ||          // { data: { ... } }
-        raw;                  // already flat
+      // Unwrap nested envelope if backend wraps in plan/action_plan/data
+      const base = raw?.plan || raw?.action_plan || raw?.data || raw;
 
-      console.log('[ActionPlan] normalised plan keys:', Object.keys(plan || {}));
-      setPlan(plan);
+      // Map backend snake_case keys to UI camelCase keys
+      const normalizedPlan = {
+        ...base,
+        days1to30: base?.days_30 || base?.days1to30 || null,
+        days31to60: base?.days_60 || base?.days31to60 || null,
+        days61to90: base?.days_90 || base?.days61to90 || null,
+        potentialPoints: base?.potential_points || base?.potentialPoints || base?.target_score_gain || null,
+      };
+
+      console.log('[ActionPlan] normalized plan keys:', Object.keys(normalizedPlan || {}));
+      setPlan(normalizedPlan);
     } catch (err) {
       console.error('[ActionPlan] error:', err?.response?.data || err.message);
       setError(err?.response?.data?.error || err?.response?.data?.message || 'Failed to load action plan');
@@ -104,8 +109,9 @@ const ActionPlanScreen = () => {
         <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(task.priority) }]}>
           <Text style={styles.priorityText}>{task.priority?.toUpperCase() || 'MEDIUM'}</Text>
         </View>
-        {task.points && (
-          <Text style={styles.pointsText}>+{task.points} pts</Text>
+        {/* Backend returns estimated_impact, handle both formats */}
+        {(task.estimated_impact || task.points) && (
+          <Text style={styles.pointsText}>{task.estimated_impact || `+${task.points} pts`}</Text>
         )}
       </View>
       
@@ -116,13 +122,15 @@ const ActionPlanScreen = () => {
       )}
       
       <View style={styles.taskFooter}>
-        {task.dispute_type && (
+        {/* Backend returns category, handle both dispute_type and category */}
+        {(task.category || task.dispute_type) && (
           <View style={styles.disputeBadge}>
-            <Text style={styles.disputeText}>{task.dispute_type.toUpperCase()}</Text>
+            <Text style={styles.disputeText}>{(task.category || task.dispute_type).toUpperCase()}</Text>
           </View>
         )}
-        {task.day && (
-          <Text style={styles.dayText}>Day {task.day}</Text>
+        {/* Backend returns due_day, handle both due_day and day */}
+        {(task.due_day || task.day) && (
+          <Text style={styles.dayText}>Day {task.due_day || task.day}</Text>
         )}
       </View>
       
@@ -135,7 +143,9 @@ const ActionPlanScreen = () => {
   const renderSection = (title, days, data, sectionKey) => {
     const isExpanded = expandedSection === sectionKey;
     const tasks = data?.tasks || data || [];
-    const pointsRange = data?.pointsRange || '';
+    // Backend returns score_impact, UI was looking for pointsRange
+    const pointsRange = data?.score_impact || data?.pointsRange || '';
+    const theme = data?.theme || days;
     
     return (
       <View style={styles.section}>
@@ -145,7 +155,7 @@ const ActionPlanScreen = () => {
         >
           <View style={styles.sectionHeaderLeft}>
             <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.sectionDays}>{days}</Text>
+            <Text style={styles.sectionDays}>{theme}</Text>
           </View>
           <View style={styles.sectionHeaderRight}>
             {pointsRange && (
