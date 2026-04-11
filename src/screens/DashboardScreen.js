@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, budgetAPI } from '../services/api';
+import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, budgetAPI, authAPI } from '../services/api';
 import QuickWinsModal from '../components/QuickWinsModal';
 import COLORS from '../theme/colors';
 
@@ -89,15 +89,17 @@ const DashboardScreen = ({ navigation }) => {
   const [points, setPoints]         = useState(0);
   const [budget, setBudget]         = useState(null);
   const [quickWinsVisible, setQuickWinsVisible] = useState(false);
+  const [profileName, setProfileName] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const [accountsRes, actionsRes, scoresRes, pointsRes, budgetRes] = await Promise.all([
+      const [accountsRes, actionsRes, scoresRes, pointsRes, budgetRes, profileRes] = await Promise.all([
         accountsAPI.getAll(),
         actionsAPI.getAll('Pending'),
         scoresAPI.getAll(),
         pointsAPI.get(),
         budgetAPI.get().catch(() => ({ data: null })),
+        authAPI.getProfile().catch(() => null),
       ]);
       setAccounts(accountsRes.data || []);
       setActions(actionsRes.data || []);
@@ -107,6 +109,9 @@ const DashboardScreen = ({ navigation }) => {
       setScores(sortedScores);
       setPoints(pointsRes.data?.points || 0);
       setBudget(budgetRes.data || null);
+      const profile = profileRes?.data || profileRes;
+      const name = profile?.full_name || profile?.name || profile?.display_name || '';
+      if (name) setProfileName(name);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
     } finally {
@@ -160,7 +165,7 @@ const DashboardScreen = ({ navigation }) => {
         <View>
           <Text style={styles.appName}>Credit Stamina</Text>
           <Text style={styles.greeting}>
-            Welcome back, <Text style={styles.greetingEmail}>{user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
+            Welcome back, <Text style={styles.greetingEmail}>{profileName || user?.user_metadata?.full_name || user?.user_metadata?.name || 'there'}</Text>
           </Text>
         </View>
         <View style={styles.pointsBadge}>
@@ -218,9 +223,9 @@ const DashboardScreen = ({ navigation }) => {
       </TouchableOpacity>
 
       {/* ── Budget Snapshot ──────────────────────────────────────────────── */}
-      {budget && (
-        <View style={styles.sectionPad}>
-          <SectionHeader title="Budget Snapshot" onSeeAll={() => navigation.navigate('Budget')} />
+      <View style={styles.sectionPad}>
+        <SectionHeader title="Budget Snapshot" onSeeAll={() => navigation.navigate('Budget')} />
+        {budget ? (
           <TouchableOpacity style={styles.budgetCard} onPress={() => navigation.navigate('Budget')}>
             <View style={styles.budgetRow}>
               <View style={styles.budgetItem}>
@@ -245,8 +250,17 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
           </TouchableOpacity>
-        </View>
-      )}
+        ) : (
+          <TouchableOpacity style={styles.budgetEmptyCard} onPress={() => navigation.navigate('Budget')}>
+            <Text style={styles.budgetEmptyIcon}>💰</Text>
+            <View style={styles.budgetEmptyText}>
+              <Text style={styles.budgetEmptyTitle}>Set Up Your Budget</Text>
+              <Text style={styles.budgetEmptySubtitle}>Track income, expenses & debt payments</Text>
+            </View>
+            <Text style={styles.budgetEmptyArrow}>→</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* ── Account Health Grid ──────────────────────────────────────────── */}
       <View style={styles.sectionPad}>
@@ -721,6 +735,36 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  budgetEmptyCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  budgetEmptyIcon: {
+    fontSize: 28,
+  },
+  budgetEmptyText: {
+    flex: 1,
+  },
+  budgetEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  budgetEmptySubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  budgetEmptyArrow: {
+    fontSize: 18,
+    color: COLORS.textSecondary,
   },
   budgetRow: {
     flexDirection: 'row',

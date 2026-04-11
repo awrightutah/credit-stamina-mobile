@@ -16,11 +16,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Auth helper functions
-export const signUp = async (email, password) => {
+export const signUp = async (email, password, fullName) => {
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: fullName ? { data: { full_name: fullName } } : undefined,
     });
     if (error) throw error;
     return data;

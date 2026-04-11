@@ -26,6 +26,7 @@ const COLORS = {
 };
 
 const RegisterScreen = ({ navigation }) => {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,7 +36,7 @@ const RegisterScreen = ({ navigation }) => {
   const { register } = useAuth();
 
   const handleRegister = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -53,7 +54,7 @@ const RegisterScreen = ({ navigation }) => {
     try {
       setLoading(true);
       setError('');
-      await register(email, password);
+      await register(email, password, fullName.trim());
       setSuccess(true);
     } catch (err) {
       setError(err.message || 'Failed to create account');
@@ -109,6 +110,19 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Full Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your full name"
+              placeholderTextColor={COLORS.textSecondary}
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>

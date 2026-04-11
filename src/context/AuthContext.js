@@ -78,11 +78,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (email, password) => {
+  const register = async (email, password, fullName) => {
     try {
       setError(null);
       setLoading(true);
-      const data = await signUp(email, password);
+      const data = await signUp(email, password, fullName);
       return data;
     } catch (e) {
       setError(e.message);

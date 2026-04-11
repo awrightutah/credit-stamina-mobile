@@ -57,10 +57,8 @@ export const authAPI = {
     // This is a placeholder for any additional auth API calls
   },
   
-  getProfile: async (token) => {
-    return api.get('/api/profile', {
-      headers: { 'x-user-token': token }
-    });
+  getProfile: async () => {
+    return api.get('/api/profile');
   },
   
   updateProfile: async (data) => {
