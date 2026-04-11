@@ -18,7 +18,7 @@ const COLORS = {
   powerPurple: '#7C3AED',
   primary: '#1E40AF',
   growthGreen: '#059669',
-  alertAmber: '#D97706',
+  alertAmber: '#F59E0B',
   background: '#0f172a',
   card: '#111827',
   surface: '#1e293b',
@@ -26,7 +26,7 @@ const COLORS = {
   textSecondary: '#6B7280',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#D97706',
+  warning: '#F59E0B',
   success: '#059669',
   purple: '#7C3AED',
 };

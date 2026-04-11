@@ -26,7 +26,7 @@ const COLORS = {
   textSecondary: '#6B7280',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#D97706',
+  warning: '#F59E0B',
   success: '#059669',
   purple: '#7C3AED',
   amber: '#FBBF24',

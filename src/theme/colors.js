@@ -12,7 +12,8 @@ export const COLORS = {
   
   // Status Colors
   growthGreen: '#059669',
-  alertAmber: '#D97706',
+  alertAmber: '#F59E0B',
+  alertAmberDark: '#D97706',
   errorRed: '#DC2626',
   
   // Background Colors
@@ -33,13 +34,13 @@ export const COLORS = {
   
   // Lane Colors (for credit classification)
   damage: '#DC2626',
-  removable: '#D97706',
+  removable: '#F59E0B',
   monitor: '#059669',
-  
+
   // Additional
   purple: '#7C3AED',
   high: '#DC2626',
-  medium: '#D97706',
+  medium: '#F59E0B',
   low: '#059669',
 };
 

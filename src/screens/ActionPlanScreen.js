@@ -20,7 +20,7 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#D97706',
+  alertAmber: '#F59E0B',
   errorRed: '#DC2626',
   background: '#0f172a',
   card: '#111827',
@@ -28,11 +28,11 @@ const COLORS = {
   textSecondary: '#6B7280',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#D97706',
+  warning: '#F59E0B',
   success: '#059669',
   purple: '#7C3AED',
   high: '#DC2626',
-  medium: '#D97706',
+  medium: '#F59E0B',
   low: '#059669',
 };
 
