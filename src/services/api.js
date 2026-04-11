@@ -147,13 +147,30 @@ export const scoresAPI = {
   getAll: async () => {
     return api.get('/api/scores');
   },
-  
-  add: async (bureau, score, recorded_date, notes) => {
-    return api.post('/api/scores', { bureau, score, recorded_date, notes });
+
+  // user_id is required by Supabase RLS — must match auth.uid()
+  add: async (bureau, score, recorded_date, notes, userId) => {
+    const payload = { bureau, score, recorded_date, notes };
+    if (userId) payload.user_id = userId;
+    return api.post('/api/scores', payload);
   },
-  
+
   delete: async (id) => {
     return api.delete(`/api/scores/${id}`);
+  },
+};
+
+// ============================================
+// GOOGLE PLACES PROXY (key stored on Railway)
+// ============================================
+
+export const placesAPI = {
+  autocomplete: async (input) => {
+    return api.get('/api/places/autocomplete', { params: { input } });
+  },
+
+  details: async (placeId) => {
+    return api.get('/api/places/details', { params: { place_id: placeId } });
   },
 };
 

@@ -336,7 +336,8 @@ const ScoreScreen = () => {
         newBureau,
         scoreNum,
         new Date().toISOString().split('T')[0],
-        newNotes.trim() || null
+        newNotes.trim() || null,
+        user?.id
       );
       setLogModalVisible(false);
       setNewScore('');

@@ -1,16 +1,15 @@
 /**
  * AddressAutocomplete
  *
- * Uses the Google Places Autocomplete + Place Details REST APIs directly
- * (no native library / no pod install required).
+ * Calls /api/places/autocomplete and /api/places/details on the Railway backend
+ * which proxies to Google Places using the server-side API key.
+ * No Google API key needed in the mobile app.
  *
  * Props:
- *   initialValue  {string}   pre-fill the text input
- *   onSelect      {Function} called with { street, city, state, zip } when user picks a result
+ *   initialValue  {string}    pre-fill the text input
+ *   onSelect      {Function}  called with { street, city, state, zip }
  *   placeholder   {string}
- *   style         {object}   extra style for the outer container
- *
- * ⚠️  Set your key in src/config/googlePlacesKey.js
+ *   style         {object}    extra style for the outer container
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -19,15 +18,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import axios from 'axios';
-import { GOOGLE_PLACES_API_KEY } from '../config/googlePlacesKey';
+import { placesAPI } from '../services/api';
 
 const COLORS = {
-  background: '#0f172a',
   card: '#111827',
   surface: '#1e293b',
   text: '#FFFFFF',
@@ -36,12 +32,9 @@ const COLORS = {
   purple: '#7C3AED',
 };
 
-const AUTOCOMPLETE_URL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
-const DETAILS_URL      = 'https://maps.googleapis.com/maps/api/place/details/json';
-
 // Pull a specific component type out of Google's address_components array
 const getComponent = (components, type, useShort = false) => {
-  const found = components.find(c => c.types.includes(type));
+  const found = (components || []).find(c => c.types?.includes(type));
   return found ? (useShort ? found.short_name : found.long_name) : '';
 };
 
@@ -58,27 +51,16 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
       setShowList(false);
       return;
     }
-    if (!GOOGLE_PLACES_API_KEY || GOOGLE_PLACES_API_KEY === 'YOUR_GOOGLE_PLACES_API_KEY') {
-      console.warn('[AddressAutocomplete] Google Places API key not set in src/config/googlePlacesKey.js');
-      return;
-    }
     setLoading(true);
     try {
-      const res = await axios.get(AUTOCOMPLETE_URL, {
-        params: {
-          input,
-          key: GOOGLE_PLACES_API_KEY,
-          types: 'address',
-          components: 'country:us',
-          language: 'en',
-        },
-        timeout: 8000,
-      });
-      const preds = res.data?.predictions ?? [];
+      const res = await placesAPI.autocomplete(input);
+      // Backend may return { predictions: [...] } or the raw Google response
+      const preds = res.data?.predictions ?? res.data ?? [];
       setPredictions(preds);
       setShowList(preds.length > 0);
     } catch (err) {
-      console.error('[AddressAutocomplete] autocomplete error:', err.message);
+      console.error('[AddressAutocomplete] autocomplete error:', err?.response?.data || err.message);
+      // Silently fail — the user can still type the address manually
     } finally {
       setLoading(false);
     }
@@ -91,24 +73,17 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
   };
 
   const handleSelectPrediction = async (prediction) => {
-    // Show the main text (street) in the input, hide dropdown immediately
     const mainText = prediction.structured_formatting?.main_text ?? prediction.description;
     setText(mainText);
     setShowList(false);
     setPredictions([]);
 
-    // Fetch full address components to auto-fill city/state/zip
     try {
-      const res = await axios.get(DETAILS_URL, {
-        params: {
-          place_id: prediction.place_id,
-          key: GOOGLE_PLACES_API_KEY,
-          fields: 'address_components',
-          language: 'en',
-        },
-        timeout: 8000,
-      });
-      const components = res.data?.result?.address_components ?? [];
+      const res = await placesAPI.details(prediction.place_id);
+      // Backend may return { result: { address_components: [...] } } or the raw Google response
+      const components = res.data?.result?.address_components
+                      ?? res.data?.address_components
+                      ?? [];
 
       const streetNumber = getComponent(components, 'street_number');
       const route        = getComponent(components, 'route');
@@ -116,20 +91,18 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
       const city         = getComponent(components, 'locality')
                         || getComponent(components, 'sublocality_level_1')
                         || getComponent(components, 'administrative_area_level_2');
-      const state        = getComponent(components, 'administrative_area_level_1', true); // short: "TX"
+      const state        = getComponent(components, 'administrative_area_level_1', true);
       const zip          = getComponent(components, 'postal_code');
 
       setText(street);
       onSelect?.({ street, city, state, zip });
     } catch (err) {
-      console.error('[AddressAutocomplete] details error:', err.message);
-      // Fall back: just set the selected description as street
+      console.error('[AddressAutocomplete] details error:', err?.response?.data || err.message);
       onSelect?.({ street: mainText, city: '', state: '', zip: '' });
     }
   };
 
   const handleBlur = () => {
-    // Small delay so tap on suggestion registers before list hides
     setTimeout(() => setShowList(false), 150);
   };
 
@@ -149,11 +122,7 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
           returnKeyType="search"
         />
         {loading && (
-          <ActivityIndicator
-            size="small"
-            color={COLORS.purple}
-            style={styles.spinner}
-          />
+          <ActivityIndicator size="small" color={COLORS.purple} style={styles.spinner} />
         )}
       </View>
 
@@ -161,7 +130,7 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
         <View style={styles.dropdown}>
           {predictions.map((pred, idx) => (
             <TouchableOpacity
-              key={pred.place_id ?? idx}
+              key={pred.place_id ?? String(idx)}
               style={[styles.predictionRow, idx < predictions.length - 1 && styles.predictionBorder]}
               onPress={() => handleSelectPrediction(pred)}
               activeOpacity={0.7}
@@ -193,7 +162,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
@@ -210,7 +179,7 @@ const styles = StyleSheet.create({
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#1e293b',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
