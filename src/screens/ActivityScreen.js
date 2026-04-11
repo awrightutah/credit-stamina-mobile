@@ -8,8 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { activityAPI, scoresAPI, accountsAPI } from '../services/api';
+import { activityAPI } from '../services/api';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -51,8 +52,8 @@ const ActivityScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    fetchActivities();
-  }, []);
+    if (user?.id) fetchActivities();
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -135,19 +136,19 @@ const ActivityScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.purple} />
+          <Text style={styles.loadingText}>Loading activity...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
         <Text style={styles.title}>Activity History</Text>
         <Text style={styles.subtitle}>Track your credit journey</Text>
       </View>
@@ -223,7 +224,7 @@ const ActivityScreen = ({ navigation }) => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -236,16 +237,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  backButton: {
-    fontSize: 16,
-    color: COLORS.primary,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
   },
   title: {
     fontSize: 28,

@@ -282,7 +282,7 @@ const LettersScreen = () => {
   const fetchLetters = async () => {
     try {
       setError(null);
-      const data = await lettersAPI.getLetters();
+      const data = await lettersAPI.getAll();
       setLetters(Array.isArray(data) ? data : data?.data || []);
     } catch (err) {
       console.error('[Letters] fetch error:', err);
@@ -303,7 +303,7 @@ const LettersScreen = () => {
   }, []);
 
   const handleGenerate = async (params) => {
-    await lettersAPI.generateLetter(params);
+    await lettersAPI.generate(params);
     await fetchLetters();
     Alert.alert('Success', 'Letter generated successfully!');
   };
@@ -316,7 +316,7 @@ const LettersScreen = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await lettersAPI.deleteLetter(id);
+            await lettersAPI.delete(id);
             setLetters(prev => prev.filter(l => l.id !== id));
           } catch {
             Alert.alert('Error', 'Failed to delete letter');

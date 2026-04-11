@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { aiAPI } from '../services/api';
+
+const COLORS = {
+  staminaBlue: '#1E40AF',
+  powerPurple: '#7C3AED',
+  background: '#0f172a',
+  card: '#111827',
+  surface: '#1e293b',
+  text: '#FFFFFF',
+  textSecondary: '#6B7280',
+  border: '#374151',
+  purple: '#7C3AED',
+};
 
 const AIAdvisorScreen = () => {
   const [messages, setMessages] = useState([
@@ -36,13 +48,14 @@ const AIAdvisorScreen = () => {
     }, 100);
   };
 
-  const handleSend = async () => {
-    if (!inputText.trim() || loading) return;
+  const sendMessage = async (text) => {
+    const content = text.trim();
+    if (!content || loading) return;
 
     const userMessage = {
       id: Date.now(),
       role: 'user',
-      content: inputText.trim(),
+      content,
       timestamp: new Date(),
     };
 
@@ -52,34 +65,34 @@ const AIAdvisorScreen = () => {
 
     try {
       const response = await aiAPI.askQuestion({
-        question: userMessage.content,
-        context: messages.slice(-5).map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
+        question: content,
+        context: messages.slice(-6).map(m => ({ role: m.role, content: m.content })),
       });
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: response?.answer || response?.message || 'I apologize, but I couldn\'t process your request. Please try again.',
-        timestamp: new Date(),
-      };
+      const raw = response?.data || response;
+      const reply = raw?.answer || raw?.message || raw?.response || raw?.content
+        || 'I couldn\'t process that request. Please try again.';
 
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
-      console.error('AI API Error:', err);
-      const errorMessage = {
+      setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
-        content: 'I apologize, but I\'m having trouble connecting right now. Please try again later.',
+        content: reply,
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      }]);
+    } catch (err) {
+      console.error('[AI Advisor] error:', err);
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: 'I\'m having trouble connecting right now. Please try again in a moment.',
+        timestamp: new Date(),
+      }]);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSend = () => sendMessage(inputText);
 
   const quickQuestions = [
     'How can I improve my credit score quickly?',
@@ -90,8 +103,7 @@ const AIAdvisorScreen = () => {
   ];
 
   const handleQuickQuestion = (question) => {
-    setInputText(question);
-    handleSend();
+    sendMessage(question);
   };
 
   const renderMessage = (message) => {
@@ -206,22 +218,24 @@ const AIAdvisorScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F1A',
+    backgroundColor: COLORS.background,
   },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F1F3D',
+    borderBottomColor: COLORS.border,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: COLORS.text,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 4,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   keyboardContainer: {
     flex: 1,
@@ -243,45 +257,51 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   messageBubble: {
-    maxWidth: '80%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
+    maxWidth: '82%',
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 18,
   },
   userBubble: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: COLORS.purple,
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    backgroundColor: '#1A1A2E',
+    backgroundColor: COLORS.card,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 22,
   },
   userText: {
-    color: '#FFFFFF',
+    color: COLORS.text,
   },
   assistantText: {
     color: '#E5E7EB',
   },
   messageTime: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.textSecondary,
     marginTop: 4,
   },
   loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#1A1A2E',
-    borderRadius: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
     alignSelf: 'flex-start',
-    maxWidth: '80%',
+    maxWidth: '60%',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   loadingText: {
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     marginLeft: 8,
     fontSize: 14,
   },
@@ -289,63 +309,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1F1F3D',
+    borderTopColor: COLORS.border,
   },
   quickQuestionsTitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 8,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 1,
+    fontWeight: '600',
   },
   quickQuestionsScroll: {
     flexDirection: 'row',
   },
   quickQuestionButton: {
-    backgroundColor: '#1A1A2E',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 20,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#2D2D4A',
+    borderColor: COLORS.border,
   },
   quickQuestionText: {
-    color: '#E5E7EB',
+    color: COLORS.text,
     fontSize: 13,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 16,
+    padding: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: '#1F1F3D',
-    backgroundColor: '#0F0F1A',
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    gap: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: '#1A1A2E',
-    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: '#FFFFFF',
+    paddingVertical: 11,
+    color: COLORS.text,
     fontSize: 15,
     maxHeight: 100,
-    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   sendButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: COLORS.purple,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingVertical: 11,
+    borderRadius: 22,
     minWidth: 70,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#2D2D4A',
+    backgroundColor: COLORS.border,
   },
   sendButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '600',
   },
