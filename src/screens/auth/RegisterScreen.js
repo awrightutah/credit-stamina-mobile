@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { supabase } from '../../services/supabase';
+import { statesAPI } from '../../services/api';
 
 const COLORS = {
   primary: '#1E40AF',
@@ -88,6 +89,21 @@ const RegisterScreen = ({ navigation }) => {
     if (!password)        { setError('Please create a password'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+
+    // Check state availability before anything else
+    try {
+      const stateActive = await statesAPI.isStateActive(state.trim());
+      if (!stateActive) {
+        setError(
+          `Credit Stamina is not yet available in ${state.trim().toUpperCase()}. ` +
+          `We are expanding to new states regularly — please check back soon or contact support@creditstamina.com to be notified when we launch in your state.`
+        );
+        return;
+      }
+    } catch {
+      // If state check fails (network error), allow registration to continue
+      // so a Supabase outage doesn't block all signups
+    }
 
     // Validate promo code if provided
     let promoData = null;

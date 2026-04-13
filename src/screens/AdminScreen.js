@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { adminAPI, POINTS_GOAL } from '../services/api';
+import { adminAPI, statesAPI, POINTS_GOAL } from '../services/api';
 import { supabase } from '../services/supabase';
 
 const COLORS = {
@@ -255,6 +255,10 @@ const AdminScreen = () => {
   const [statsError, setStatsError] = useState(false);
   const [usersError, setUsersError] = useState(false);
   const [usersErrorMsg, setUsersErrorMsg] = useState('');
+  const [states, setStates] = useState([]);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [statesSearch, setStatesSearch] = useState('');
+  const [togglingState, setTogglingState] = useState('');
   const retryCount = useRef(0);
 
   // Fetch with silent auto-retry (up to 3 attempts, 1.5s apart)
@@ -309,15 +313,43 @@ const AdminScreen = () => {
     setActivity(data);
   }, []);
 
+  const loadStates = useCallback(async () => {
+    setStatesLoading(true);
+    try {
+      const data = await statesAPI.getAll();
+      setStates(data);
+    } catch (e) {
+      console.warn('[Admin] loadStates error:', e?.message);
+    } finally {
+      setStatesLoading(false);
+    }
+  }, []);
+
+  const handleToggleState = async (stateCode, currentActive) => {
+    setTogglingState(stateCode);
+    try {
+      await statesAPI.setActive(stateCode, !currentActive);
+      setStates(prev => prev.map(s =>
+        s.state_code === stateCode ? { ...s, is_active: !currentActive } : s
+      ));
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Could not update state');
+    } finally {
+      setTogglingState('');
+    }
+  };
+
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     if (tab === 'activity') loadActivity();
-  }, [tab, loadActivity]);
+    if (tab === 'states') loadStates();
+  }, [tab, loadActivity, loadStates]);
 
   const onRefresh = () => {
     setRefreshing(true);
     if (tab === 'activity') loadActivity();
+    else if (tab === 'states') { loadStates(); setRefreshing(false); }
     else loadData();
   };
 
@@ -360,7 +392,8 @@ const AdminScreen = () => {
       <View style={styles.tabBar}>
         {[
           { key: 'overview', label: 'Overview' },
-          { key: 'users', label: `Users (${users.length})` },
+          { key: 'users',    label: `Users (${users.length})` },
+          { key: 'states',   label: 'States' },
           { key: 'activity', label: 'Activity' },
         ].map(t => (
           <TouchableOpacity
@@ -502,6 +535,73 @@ const AdminScreen = () => {
                     {filteredUsers.map((u) => (
                       <UserRow key={u.id} user={u} onPress={setEditUser} />
                     ))}
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* ── States Tab ── */}
+            {tab === 'states' && (
+              <>
+                <View style={styles.statesHeader}>
+                  <Text style={styles.statesTitle}>Service Area</Text>
+                  <Text style={styles.statesSubtitle}>
+                    {states.filter(s => s.is_active).length} of {states.length} states active
+                  </Text>
+                </View>
+
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search states..."
+                  placeholderTextColor={COLORS.textSecondary}
+                  value={statesSearch}
+                  onChangeText={setStatesSearch}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                {statesLoading ? (
+                  <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={COLORS.purple} />
+                    <Text style={styles.loadingText}>Loading states...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.card}>
+                    {states
+                      .filter(s =>
+                        !statesSearch ||
+                        s.state_name.toLowerCase().includes(statesSearch.toLowerCase()) ||
+                        s.state_code.toLowerCase().includes(statesSearch.toLowerCase())
+                      )
+                      .map((s, i, arr) => (
+                        <View
+                          key={s.state_code}
+                          style={[styles.stateRow, i < arr.length - 1 && styles.stateRowBorder]}
+                        >
+                          <View style={styles.stateInfo}>
+                            <Text style={styles.stateCode}>{s.state_code}</Text>
+                            <Text style={styles.stateName}>{s.state_name}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.stateToggle,
+                              s.is_active ? styles.stateToggleOn : styles.stateToggleOff,
+                              togglingState === s.state_code && { opacity: 0.5 },
+                            ]}
+                            onPress={() => handleToggleState(s.state_code, s.is_active)}
+                            disabled={togglingState === s.state_code}
+                            activeOpacity={0.7}
+                          >
+                            {togglingState === s.state_code
+                              ? <ActivityIndicator size="small" color="#FFF" />
+                              : <Text style={styles.stateToggleText}>
+                                  {s.is_active ? 'Active' : 'Inactive'}
+                                </Text>
+                            }
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    }
                   </View>
                 )}
               </>
@@ -766,6 +866,64 @@ const styles = StyleSheet.create({
   activityTime: { alignItems: 'flex-end', marginLeft: 8 },
   activityDate: { fontSize: 11, color: COLORS.textSecondary },
   activityTimeText: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
+  // States tab
+  statesHeader: {
+    marginBottom: 10,
+  },
+  statesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  statesSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  stateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  stateRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  stateInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stateCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    width: 32,
+  },
+  stateName: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  stateToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    minWidth: 76,
+    alignItems: 'center',
+  },
+  stateToggleOn: {
+    backgroundColor: COLORS.success,
+  },
+  stateToggleOff: {
+    backgroundColor: COLORS.border,
+  },
+  stateToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFF',
+  },
   // Edit modal
   modalOverlay: {
     flex: 1,

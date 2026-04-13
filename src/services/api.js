@@ -985,6 +985,55 @@ export const householdAPI = {
 // NOTIFICATIONS ENDPOINTS
 // ============================================
 
+// ============================================
+// SERVICE STATES — which states Credit Stamina is licensed to operate in
+// ============================================
+export const statesAPI = {
+  // Returns all 50 states with their is_active flag (public, no auth needed)
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('service_states')
+      .select('state_code, state_name, is_active, note')
+      .order('state_name');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  // Returns just the active state codes — used for registration check
+  getActiveCodes: async () => {
+    const { data, error } = await supabase
+      .from('service_states')
+      .select('state_code')
+      .eq('is_active', true);
+    if (error) throw error;
+    return (data ?? []).map(r => r.state_code);
+  },
+
+  // Check a single state — returns true if Credit Stamina operates there
+  isStateActive: async (stateCode) => {
+    if (!stateCode) return false;
+    const { data, error } = await supabase
+      .from('service_states')
+      .select('is_active')
+      .eq('state_code', stateCode.toUpperCase().trim())
+      .single();
+    if (error || !data) return false;
+    return data.is_active === true;
+  },
+
+  // Admin: toggle a state on or off
+  setActive: async (stateCode, isActive) => {
+    const { data, error } = await supabase
+      .from('service_states')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('state_code', stateCode.toUpperCase().trim())
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+};
+
 export const notificationsAPI = {
   // Register APNs device token with the backend
   registerToken: async (deviceToken) => {
