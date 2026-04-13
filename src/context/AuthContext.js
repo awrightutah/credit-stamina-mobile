@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPassword, updateUserProfile } from '../services/supabase';
+import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPassword, updateUserProfile, isRefreshTokenError, clearStoredSession } from '../services/supabase';
 import { setStoredToken, authAPI } from '../services/api';
+import { updateBiometricSession } from '../services/biometrics';
+// Push notification helpers — imported lazily inside login() to avoid
+// NativeEventEmitter initialization before the bridge is ready.
+const getPushHelpers = () => {
+  try {
+    const mod = require('../services/notifications');
+    return { registerForPushNotifications: mod.registerForPushNotifications, checkNotificationPermissions: mod.checkNotificationPermissions };
+  } catch {
+    return { registerForPushNotifications: async () => null, checkNotificationPermissions: async () => ({ alert: false }) };
+  }
+};
 
 const AuthContext = createContext({});
 
@@ -17,22 +28,34 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Shown on the login screen after a silent session expiry
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState(null);
 
   useEffect(() => {
-    // Get initial session
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth...');
-        const session = await getSession();
-        console.log('Session:', session);
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.access_token) {
-          setStoredToken(session.access_token);
+        const currentSession = await getSession();
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        if (currentSession?.access_token) {
+          setStoredToken(currentSession.access_token);
         }
       } catch (e) {
-        console.error('Auth initialization error:', e);
-        setError(e.message);
+        if (isRefreshTokenError(e)) {
+          // Stale token from a previous install or expired session.
+          // Clear storage silently and let the navigator send the user to login.
+          console.log('[Auth] Stale refresh token on startup — clearing session');
+          await clearStoredSession();
+          setUser(null);
+          setSession(null);
+          setStoredToken(null);
+          setSessionExpiredMessage('Your session expired. Please log in again.');
+        } else {
+          // Unexpected error — still don't crash; just drop to login
+          console.warn('[Auth] initializeAuth unexpected error:', e?.message);
+          setUser(null);
+          setSession(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -40,23 +63,26 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // Listen for auth changes
+    // Listen for auth state changes (token refresh, sign-out, etc.)
     let subscription = null;
     try {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log('Auth state changed:', event);
-          setSession(session);
-          setUser(session?.user ?? null);
-          if (session?.access_token) {
-            setStoredToken(session.access_token);
+      const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          setUser(null);
+          setSession(null);
+          setStoredToken(null);
+        } else if (newSession) {
+          setSession(newSession);
+          setUser(newSession.user ?? null);
+          if (newSession.access_token) {
+            setStoredToken(newSession.access_token);
           }
-          setLoading(false);
         }
-      );
+        setLoading(false);
+      });
       subscription = data?.subscription;
     } catch (e) {
-      console.error('Auth state change listener error:', e);
+      console.warn('[Auth] onAuthStateChange setup error:', e?.message);
     }
 
     return () => {
@@ -67,8 +93,17 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setError(null);
+      setSessionExpiredMessage(null);
       setLoading(true);
       const data = await signIn(email, password);
+      // Request push notification permission after successful login (non-blocking, never throws)
+      try {
+        const { checkNotificationPermissions, registerForPushNotifications } = getPushHelpers();
+        checkNotificationPermissions().then(({ alert }) => {
+          if (!alert) registerForPushNotifications().catch(() => null);
+        }).catch(() => null);
+      } catch {}
+
       return data;
     } catch (e) {
       setError(e.message);
@@ -131,11 +166,51 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setLoading(true);
-      await signOut();
+      await clearStoredSession();
       setUser(null);
       setSession(null);
       setStoredToken(null);
+      setSessionExpiredMessage(null);
     } catch (e) {
+      // Force-clear local state even if network sign-out fails
+      setUser(null);
+      setSession(null);
+      setStoredToken(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Restore a session using stored tokens (used by biometric login).
+  // Calls supabase.auth.setSession which validates/refreshes the tokens.
+  // Returns the refreshed session on success, throws on failure.
+  const loginWithSession = async (storedTokens) => {
+    try {
+      setError(null);
+      setLoading(true);
+      const { data, error } = await supabase.auth.setSession({
+        access_token:  storedTokens.access_token,
+        refresh_token: storedTokens.refresh_token,
+      });
+      if (error) throw error;
+      if (!data?.session) throw new Error('Session could not be restored');
+
+      // Keep stored biometric tokens fresh after a successful refresh
+      if (data.session.user?.id) {
+        updateBiometricSession(data.session.user.id, data.session).catch(() => null);
+      }
+
+      return data.session;
+    } catch (e) {
+      if (isRefreshTokenError(e)) {
+        // Biometric tokens are stale — clear them and force re-login
+        await clearStoredSession();
+        setUser(null);
+        setSession(null);
+        setStoredToken(null);
+        setSessionExpiredMessage('Your session expired. Please log in again.');
+        throw new Error('Session expired');
+      }
       setError(e.message);
       throw e;
     } finally {
@@ -158,13 +233,16 @@ export const AuthProvider = ({ children }) => {
     session,
     loading,
     error,
+    sessionExpiredMessage,
     isAuthenticated: !!user,
     login,
+    loginWithSession,
     register,
     logout,
     forgotPassword,
     updateProfile,
     setError,
+    clearSessionExpiredMessage: () => setSessionExpiredMessage(null),
   };
 
   return (

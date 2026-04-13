@@ -9,9 +9,11 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import { supabase } from '../../services/supabase';
 
 const COLORS = {
   primary: '#1E40AF',
@@ -50,6 +52,7 @@ const RegisterScreen = ({ navigation }) => {
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [promoCode, setPromoCode]     = useState('');
 
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
@@ -72,6 +75,7 @@ const RegisterScreen = ({ navigation }) => {
   const emailRef     = useRef(null);
   const passwordRef  = useRef(null);
   const confirmRef   = useRef(null);
+  const promoRef     = useRef(null);
 
   const handleRegister = async () => {
     if (!fullName.trim()) { setError('Please enter your full name'); return; }
@@ -85,10 +89,33 @@ const RegisterScreen = ({ navigation }) => {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
 
+    // Validate promo code if provided
+    let promoData = null;
+    if (promoCode.trim()) {
+      const { data: promo, error: promoErr } = await supabase
+        .from('promo_codes')
+        .select('id, price, uses_count, max_uses, is_active')
+        .eq('code', promoCode.trim().toUpperCase())
+        .single();
+      if (promoErr || !promo) {
+        setError('Invalid promo code. Please check and try again.');
+        return;
+      }
+      if (!promo.is_active) {
+        setError('This promo code is no longer active.');
+        return;
+      }
+      if (promo.max_uses !== null && promo.uses_count >= promo.max_uses) {
+        setError('This promo code has reached its usage limit.');
+        return;
+      }
+      promoData = promo;
+    }
+
     try {
       setLoading(true);
       setError('');
-      await register(email.trim().toLowerCase(), password, {
+      const data = await register(email.trim().toLowerCase(), password, {
         fullName: fullName.trim(),
         phone: phone.trim(),
         address: {
@@ -98,6 +125,25 @@ const RegisterScreen = ({ navigation }) => {
           zip: zip.trim(),
         },
       });
+
+      // Apply promo to profile if a valid code was provided
+      if (promoData) {
+        const userId = data?.user?.id;
+        if (userId) {
+          await supabase.from('profiles').upsert({
+            id: userId,
+            promo_price: promoData.price,
+            is_test_user: true,
+            promo_code_id: promoData.id,
+          }, { onConflict: 'id' }).catch(() => null);
+          // Increment uses_count (non-critical)
+          await supabase.from('promo_codes')
+            .update({ uses_count: (promoData.uses_count ?? 0) + 1 })
+            .eq('id', promoData.id)
+            .catch(() => null);
+        }
+      }
+
       setSuccess(true);
     } catch (err) {
       setError(err.message || 'Failed to create account');
@@ -111,15 +157,27 @@ const RegisterScreen = ({ navigation }) => {
       <View style={styles.container}>
         <View style={styles.successContainer}>
           <View style={styles.successIcon}>
-            <Text style={styles.successIconText}>✓</Text>
+            <Text style={styles.successIconText}>✉️</Text>
           </View>
-          <Text style={styles.successTitle}>Check Your Email</Text>
+          <Text style={styles.successTitle}>Almost There!</Text>
           <Text style={styles.successText}>
-            We've sent a confirmation link to {email}. Click the link to verify your account before signing in.
+            We sent a confirmation link to{'\n'}
+            <Text style={{ color: COLORS.primary, fontWeight: '600' }}>{email}</Text>
+            {'\n\n'}Tap the link in that email to verify your account, then come back and sign in.
           </Text>
           <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.buttonText}>Back to Sign In</Text>
+            <Text style={styles.buttonText}>Go to Sign In</Text>
           </TouchableOpacity>
+          <Text style={styles.resendNote}>
+            Didn't get it? Check your spam folder or{' '}
+            <Text
+              style={{ color: COLORS.primary }}
+              onPress={() => {
+                setSuccess(false);
+                setEmail(email);
+              }}
+            >try a different email</Text>.
+          </Text>
         </View>
       </View>
     );
@@ -288,6 +346,23 @@ const RegisterScreen = ({ navigation }) => {
             onChangeText={setConfirmPassword}
             secureTextEntry
             autoCapitalize="none"
+            returnKeyType="next"
+            onSubmitEditing={() => promoRef.current?.focus()}
+          />
+        </Field>
+
+        {/* ── Promo Code (optional) ── */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>PROMO CODE</Text>
+        <Field label="Promo Code (Optional)">
+          <TextInput
+            ref={promoRef}
+            style={styles.input}
+            placeholder="Enter code if you have one"
+            placeholderTextColor={COLORS.textSecondary}
+            value={promoCode}
+            onChangeText={setPromoCode}
+            autoCapitalize="characters"
+            autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleRegister}
           />
@@ -309,8 +384,15 @@ const RegisterScreen = ({ navigation }) => {
         <View style={styles.termsContainer}>
           <Text style={styles.termsText}>
             By creating an account, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL('https://creditstamina.com/terms').catch(() => {})}
+            >Terms of Service</Text>
+            {' '}and{' '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL('https://creditstamina.com/privacy').catch(() => {})}
+            >Privacy Policy</Text>
           </Text>
         </View>
       </ScrollView>
@@ -456,6 +538,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 22,
+  },
+  resendNote: {
+    marginTop: 16,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

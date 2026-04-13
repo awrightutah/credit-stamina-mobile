@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { hasSeenOnboarding } from '../screens/onboarding/OnboardingScreen';
+import { setupNotificationHandlers } from '../services/notifications';
+import { navigateTo } from './navigationRef';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -30,14 +32,19 @@ import BudgetScreen from '../screens/BudgetScreen';
 import ScoreSimulatorScreen from '../screens/ScoreSimulatorScreen';
 import ActivityScreen from '../screens/ActivityScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import BillingHistoryScreen from '../screens/BillingHistoryScreen';
+import DisputeTrackerScreen from '../screens/DisputeTrackerScreen';
+import FamilyScreen from '../screens/FamilyScreen';
+import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
+import AdminScreen from '../screens/AdminScreen';
 
 const COLORS = {
   primary: '#1E40AF',
   purple: '#7C3AED',
-  background: '#0f172a',
-  card: '#111827',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
 };
 
@@ -117,6 +124,23 @@ const AppNavigator = () => {
     }
   }, [loading, isAuthenticated]);
 
+  // Handle push notification deep links → navigate to the correct screen
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const cleanup = setupNotificationHandlers({
+      onOpen: (notification) => {
+        const { screen, letterId } = notification?.data ?? {};
+        if (!screen) return;
+        try {
+          if (screen === 'Letters') navigateTo('Letters', letterId ? { openLetterId: letterId } : undefined);
+        } catch (e) {
+          console.warn('[AppNavigator] notification nav error:', e?.message);
+        }
+      },
+    });
+    return cleanup;
+  }, [isAuthenticated]);
+
   if (loading || !onboardingChecked) return null;
 
   if (isAuthenticated) {
@@ -132,6 +156,11 @@ const AppNavigator = () => {
         <Stack.Screen name="ScoreSimulator" component={ScoreSimulatorScreen} />
         <Stack.Screen name="Activity" component={ActivityScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+        <Stack.Screen name="BillingHistory" component={BillingHistoryScreen} />
+        <Stack.Screen name="DisputeTracker" component={DisputeTrackerScreen} />
+        <Stack.Screen name="Family" component={FamilyScreen} />
+        <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+        <Stack.Screen name="Admin" component={AdminScreen} />
       </Stack.Navigator>
     );
   }
