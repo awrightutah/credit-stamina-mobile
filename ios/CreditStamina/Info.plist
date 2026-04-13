@@ -35,8 +35,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Credit Stamina needs camera access to scan documents and credit reports.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Credit Stamina uses Face ID to securely log you in and protect your financial data</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Credit Stamina needs photo library access to upload credit reports.</string>
 	<key>RCTNewArchEnabled</key>
@@ -58,7 +58,13 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

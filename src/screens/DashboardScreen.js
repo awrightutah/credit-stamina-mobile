@@ -24,7 +24,7 @@ const getScoreColor = (score) => {
   if (score >= 700) return COLORS.staminaBlue;
   if (score >= 650) return COLORS.powerPurple;
   if (score >= 600) return COLORS.alertAmber;
-  return '#B45309';
+  return '#EA580C';
 };
 
 const getScoreTier = (score) => {
@@ -83,6 +83,7 @@ const DashboardScreen = ({ navigation }) => {
   const { user } = useAuth();
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError]   = useState(false);
   const [accounts, setAccounts]     = useState([]);
   const [actions, setActions]       = useState([]);
   const [scores, setScores]         = useState([]);
@@ -92,12 +93,13 @@ const DashboardScreen = ({ navigation }) => {
   const [profileName, setProfileName] = useState('');
 
   const fetchData = useCallback(async () => {
+    setLoadError(false);
     try {
       const [accountsRes, actionsRes, scoresRes, pointsRes, budgetRes, profileRes] = await Promise.all([
         accountsAPI.getAll(),
         actionsAPI.getAll('Pending'),
         scoresAPI.getAll(),
-        pointsAPI.get(),
+        pointsAPI.get().catch(() => ({ data: { points: 0 } })),
         budgetAPI.get().catch(() => ({ data: null })),
         authAPI.getProfile().catch(() => null),
       ]);
@@ -114,6 +116,7 @@ const DashboardScreen = ({ navigation }) => {
       if (name) setProfileName(name);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
+      setLoadError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -160,6 +163,13 @@ const DashboardScreen = ({ navigation }) => {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.powerPurple} />}
     >
+      {/* ── Error Banner ─────────────────────────────────────────────────── */}
+      {loadError && (
+        <TouchableOpacity style={styles.errorBanner} onPress={fetchData} activeOpacity={0.8}>
+          <Text style={styles.errorBannerText}>⚠️  Could not load your data. Tap to retry.</Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View>
@@ -221,6 +231,42 @@ const DashboardScreen = ({ navigation }) => {
           <Text style={styles.scoreEmpty}>Tap to log your first credit score →</Text>
         )}
       </TouchableOpacity>
+
+      {/* ── First-Run Welcome Banner (new users only) ───────────────────── */}
+      {accounts.length === 0 && scores.length === 0 && !loadError && (
+        <View style={styles.welcomeBanner}>
+          <Text style={styles.welcomeTitle}>👋 Welcome to Credit Stamina!</Text>
+          <Text style={styles.welcomeText}>
+            Let's get your credit journey started. Upload your credit report and our AI will build your personalized recovery plan in minutes.
+          </Text>
+          <View style={styles.welcomeSteps}>
+            <TouchableOpacity style={styles.welcomeStep} onPress={() => navigation.navigate('Upload')}>
+              <Text style={styles.welcomeStepNum}>1</Text>
+              <View style={styles.welcomeStepContent}>
+                <Text style={styles.welcomeStepTitle}>Upload Credit Report</Text>
+                <Text style={styles.welcomeStepDesc}>PDF from Equifax, Experian, or TransUnion</Text>
+              </View>
+              <Text style={styles.welcomeStepArrow}>→</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.welcomeStep} onPress={() => navigation.navigate('Score')}>
+              <Text style={styles.welcomeStepNum}>2</Text>
+              <View style={styles.welcomeStepContent}>
+                <Text style={styles.welcomeStepTitle}>Log Your Score</Text>
+                <Text style={styles.welcomeStepDesc}>Track your starting point</Text>
+              </View>
+              <Text style={styles.welcomeStepArrow}>→</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.welcomeStep} onPress={() => navigation.navigate('ActionPlan')}>
+              <Text style={[styles.welcomeStepNum, { backgroundColor: COLORS.powerPurple + '30', color: COLORS.powerPurple }]}>3</Text>
+              <View style={styles.welcomeStepContent}>
+                <Text style={styles.welcomeStepTitle}>Get Your AI Plan</Text>
+                <Text style={styles.welcomeStepDesc}>30/60/90 day credit repair roadmap</Text>
+              </View>
+              <Text style={styles.welcomeStepArrow}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ── Budget Snapshot ──────────────────────────────────────────────── */}
       <View style={styles.sectionPad}>
@@ -390,6 +436,87 @@ const DashboardScreen = ({ navigation }) => {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  // First-run welcome banner
+  welcomeBanner: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: COLORS.powerPurple + '15',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.powerPurple + '40',
+  },
+  welcomeTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  welcomeSteps: {
+    gap: 8,
+  },
+  welcomeStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  welcomeStepNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.staminaBlue + '30',
+    color: COLORS.staminaBlue,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 28,
+    marginRight: 12,
+  },
+  welcomeStepContent: {
+    flex: 1,
+  },
+  welcomeStepTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  welcomeStepDesc: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  welcomeStepArrow: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginLeft: 8,
+  },
+  errorBanner: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: 'rgba(220,38,38,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,38,38,0.35)',
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  errorBannerText: {
+    color: '#FCA5A5',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   loader: {
     flex: 1,
     justifyContent: 'center',

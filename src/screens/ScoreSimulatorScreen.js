@@ -8,8 +8,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { aiAPI, accountsAPI } from '../services/api';
+import { aiAPI, accountsAPI, scoresAPI } from '../services/api';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -18,15 +19,15 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#F59E0B',
+  alertAmber: '#F97316',
   errorRed: '#DC2626',
-  background: '#0f172a',
-  card: '#111827',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#F59E0B',
+  warning: '#F97316',
   success: '#059669',
   purple: '#7C3AED',
 };
@@ -37,10 +38,14 @@ const ScoreSimulatorScreen = ({ navigation }) => {
   const [accounts, setAccounts] = useState([]);
   const [selectedImprovements, setSelectedImprovements] = useState([]);
   const [prediction, setPrediction] = useState(null);
+  const [currentScore, setCurrentScore] = useState(null);
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+    if (user?.id) {
+      fetchAccounts();
+      fetchCurrentScore();
+    }
+  }, [user?.id]);
 
   const fetchAccounts = async () => {
     try {
@@ -48,6 +53,20 @@ const ScoreSimulatorScreen = ({ navigation }) => {
       setAccounts(response.data || []);
     } catch (error) {
       console.error('Error fetching accounts:', error);
+    }
+  };
+
+  const fetchCurrentScore = async () => {
+    try {
+      const response = await scoresAPI.getAll();
+      const scores = response?.data || [];
+      if (scores.length > 0) {
+        // Use the most recent score entry
+        const sorted = [...scores].sort((a, b) => new Date(b.recorded_date || b.created_at) - new Date(a.recorded_date || a.created_at));
+        setCurrentScore(sorted[0]?.score ?? null);
+      }
+    } catch {
+      // non-critical — simulator still works without it
     }
   };
 
@@ -69,8 +88,18 @@ const ScoreSimulatorScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const response = await aiAPI.predictScore(selectedImprovements);
-      setPrediction(response.data);
+      const response = await aiAPI.predictScore(selectedImprovements, currentScore);
+      const data = { ...(response.data ?? {}) };
+      // Merge in currentScore as fallback if API doesn't return it
+      if (currentScore && !data.current_score) data.current_score = currentScore;
+      // API returns predictions array: [{month, score, label, milestone}]
+      // Derive predicted_score and points_change from the final entry
+      if (Array.isArray(data.predictions) && data.predictions.length > 0) {
+        const last = data.predictions[data.predictions.length - 1];
+        data.predicted_score = last.score;
+        data.points_change = last.score - (data.current_score || 0);
+      }
+      setPrediction(data);
     } catch (error) {
       console.error('Error predicting score:', error);
       Alert.alert('Error', 'Failed to simulate score. Please try again.');
@@ -80,7 +109,7 @@ const ScoreSimulatorScreen = ({ navigation }) => {
   };
 
   // Generate improvement options from accounts
-  const improvementOptions = accounts.map(account => [
+  const accountOptions = accounts.map(account => [
     {
       id: `${account.id}-payoff`,
       account_id: account.id,
@@ -99,6 +128,20 @@ const ScoreSimulatorScreen = ({ navigation }) => {
     },
   ]).flat();
 
+  // Always include general improvement options
+  const generalOptions = [
+    {
+      id: 'general-utilization',
+      account_id: null,
+      account_name: 'Credit Utilization',
+      type: 'lower_utilization',
+      description: 'Lower utilization below 30%',
+      details: 'Pay down revolving balances to reduce your utilization ratio',
+    },
+  ];
+
+  const improvementOptions = [...generalOptions, ...accountOptions];
+
   const getImprovementIcon = (type) => {
     switch (type) {
       case 'pay_off': return '💳';
@@ -109,6 +152,7 @@ const ScoreSimulatorScreen = ({ navigation }) => {
   };
 
   return (
+    <SafeAreaView style={styles.safeArea}>
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -118,6 +162,14 @@ const ScoreSimulatorScreen = ({ navigation }) => {
         <Text style={styles.title}>Score Simulator</Text>
         <Text style={styles.subtitle}>See how improvements affect your score</Text>
       </View>
+
+      {/* Current Score Banner */}
+      {currentScore && (
+        <View style={styles.currentScoreCard}>
+          <Text style={styles.currentScoreLabel}>Your Current Score</Text>
+          <Text style={styles.currentScoreValue}>{currentScore}</Text>
+        </View>
+      )}
 
       {/* Instructions */}
       <View style={styles.instructionsCard}>
@@ -197,7 +249,7 @@ const ScoreSimulatorScreen = ({ navigation }) => {
       {prediction && (
         <View style={styles.predictionCard}>
           <Text style={styles.predictionTitle}>🎯 Predicted Impact</Text>
-          
+
           <View style={styles.scoreComparison}>
             <View style={styles.scoreBox}>
               <Text style={styles.scoreLabel}>Current</Text>
@@ -207,31 +259,52 @@ const ScoreSimulatorScreen = ({ navigation }) => {
             <View style={[styles.scoreBox, styles.scoreBoxPredicted]}>
               <Text style={styles.scoreLabel}>Predicted</Text>
               <Text style={[styles.scoreValue, styles.scoreValuePredicted]}>
-                {prediction.predicted_score || '---'}
+                {prediction.predicted_score || prediction.target_score || '---'}
               </Text>
             </View>
           </View>
 
-          <View style={styles.changeIndicator}>
-            <Text style={[
-              styles.changeText,
-              { color: prediction.points_change >= 0 ? COLORS.success : COLORS.danger }
-            ]}>
-              {prediction.points_change >= 0 ? '+' : ''}{prediction.points_change} points
-            </Text>
-          </View>
-
-          {prediction.explanation && (
-            <View style={styles.explanationBox}>
-              <Text style={styles.explanationTitle}>Why this change?</Text>
-              <Text style={styles.explanationText}>{prediction.explanation}</Text>
+          {prediction.points_change != null && (
+            <View style={styles.changeIndicator}>
+              <Text style={[
+                styles.changeText,
+                { color: prediction.points_change >= 0 ? COLORS.success : COLORS.danger }
+              ]}>
+                {prediction.points_change >= 0 ? '+' : ''}{prediction.points_change} points
+              </Text>
             </View>
           )}
 
-          {prediction.timeline && (
+          {prediction.summary && (
+            <View style={styles.explanationBox}>
+              <Text style={styles.explanationTitle}>Summary</Text>
+              <Text style={styles.explanationText}>{prediction.summary}</Text>
+            </View>
+          )}
+
+          {/* 12-month predictions timeline */}
+          {Array.isArray(prediction.predictions) && prediction.predictions.length > 0 && (
             <View style={styles.timelineBox}>
-              <Text style={styles.timelineTitle}>📅 Expected Timeline</Text>
-              <Text style={styles.timelineText}>{prediction.timeline}</Text>
+              <Text style={styles.timelineTitle}>📅 Score Timeline</Text>
+              {prediction.predictions.map((p, i) => (
+                <View key={i} style={styles.timelineRow}>
+                  <Text style={styles.timelineMonth}>{p.month || `Month ${i + 1}`}</Text>
+                  <Text style={styles.timelineScore}>{p.score}</Text>
+                  {p.label ? <Text style={styles.timelineLabel}>{p.label}</Text> : null}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {Array.isArray(prediction.key_actions) && prediction.key_actions.length > 0 && (
+            <View style={styles.explanationBox}>
+              <Text style={styles.explanationTitle}>Key Actions</Text>
+              {prediction.key_actions.map((action, i) => (
+                <View key={i} style={styles.keyActionRow}>
+                  <Text style={styles.keyActionBullet}>•</Text>
+                  <Text style={styles.keyActionText}>{action}</Text>
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -260,17 +333,22 @@ const ScoreSimulatorScreen = ({ navigation }) => {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   header: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 8,
   },
   backButton: {
     fontSize: 16,
@@ -286,6 +364,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textSecondary,
     marginTop: 4,
+  },
+  currentScoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.card,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: COLORS.purple + '40',
+  },
+  currentScoreLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  currentScoreValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.purple,
   },
   instructionsCard: {
     backgroundColor: COLORS.card,
@@ -502,11 +603,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.purple,
+    marginBottom: 8,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  timelineMonth: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    width: 80,
+  },
+  timelineScore: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    width: 44,
+  },
+  timelineLabel: {
+    fontSize: 12,
+    color: COLORS.purple,
+    flex: 1,
+  },
+  keyActionRow: {
+    flexDirection: 'row',
     marginBottom: 4,
   },
-  timelineText: {
+  keyActionBullet: {
+    color: COLORS.success,
+    marginRight: 8,
     fontSize: 14,
-    color: COLORS.text,
+    lineHeight: 20,
+  },
+  keyActionText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
   },
   tipsCard: {
     backgroundColor: COLORS.card,

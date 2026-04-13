@@ -8,12 +8,17 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { accountsAPI } from '../services/api';
+import { accountsAPI, notesAPI, actionsAPI } from '../services/api';
+
+const ACCOUNT_TYPES = ['Credit Card', 'Collection', 'Auto Loan', 'Medical', 'Student Loan', 'Mortgage', 'Personal Loan', 'Charge-Off', 'Other'];
+const BUREAUS_LIST = ['Equifax', 'Experian', 'TransUnion'];
+const LANE_LIST = ['Active Damage', 'Removable', 'Aging/Monitor'];
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
@@ -22,16 +27,16 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#F59E0B',
+  alertAmber: '#F97316',
   errorRed: '#DC2626',
-  background: '#0f172a',
-  card: '#111827',
-  surface: '#1e293b',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  surface: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#F59E0B',
+  warning: '#F97316',
   success: '#059669',
   purple: '#7C3AED',
 };
@@ -106,8 +111,87 @@ const AccountCard = ({ item, onPress }) => {
   );
 };
 
+const DISPUTE_OUTCOMES = [
+  { key: 'removed', label: '✅ Removed / Fixed', color: '#059669' },
+  { key: 'partial', label: '⚠️ Partial Win',     color: '#F97316' },
+  { key: 'denied',  label: '❌ Denied',           color: '#DC2626' },
+  { key: 'pending', label: '⏳ Still Pending',    color: '#6B7280' },
+];
+
 // ─── Account Detail Modal ──────────────────────────────────────────────────────
-const AccountDetailModal = ({ account, visible, onClose, onNavigateActions }) => {
+const AccountDetailModal = ({ account, visible, onClose, onNavigateActions, onDelete, onEdit }) => {
+  const [notes, setNotes]             = useState([]);
+  const [noteText, setNoteText]       = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [savingNote, setSavingNote]   = useState(false);
+  const [outcomeLoading, setOutcomeLoading] = useState(false);
+  const [loggedOutcome, setLoggedOutcome]   = useState(null);
+
+  useEffect(() => {
+    if (visible && account?.id) {
+      loadNotes();
+    } else {
+      setNotes([]);
+      setNoteText('');
+      setLoggedOutcome(null);
+    }
+  }, [visible, account?.id]);
+
+  const loadNotes = async () => {
+    setNotesLoading(true);
+    try {
+      const res = await notesAPI.getForAccount(account.id);
+      const data = res?.data ?? res ?? [];
+      setNotes(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('[AccountModal] notes load error:', e?.response?.data || e.message);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!noteText.trim()) return;
+    setSavingNote(true);
+    try {
+      await notesAPI.create(account.id, noteText.trim());
+      setNoteText('');
+      await loadNotes();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save note');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    try {
+      await notesAPI.delete(noteId);
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch (e) {
+      Alert.alert('Error', 'Failed to delete note');
+    }
+  };
+
+  const handleLogOutcome = async (outcome) => {
+    setOutcomeLoading(true);
+    try {
+      await actionsAPI.create({
+        title: `Dispute Outcome: ${outcome.label.replace(/^[^\w]+/, '')} — ${account.creditor || account.account_name}`,
+        lane: account.lane,
+        priority: outcome.key === 'removed' ? 'low' : 'high',
+        status: 'complete',
+        notes: `Bureau: ${account.bureau || 'N/A'}`,
+      });
+      setLoggedOutcome(outcome.key);
+      Alert.alert('Outcome Logged', `Dispute outcome "${outcome.label}" has been recorded in your action history.`);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to log outcome');
+    } finally {
+      setOutcomeLoading(false);
+    }
+  };
+
   if (!account) return null;
   const laneColor = getLaneColor(account.lane);
 
@@ -115,7 +199,7 @@ const AccountDetailModal = ({ account, visible, onClose, onNavigateActions }) =>
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Handle bar */}
             <View style={styles.handleBar} />
 
@@ -183,9 +267,79 @@ const AccountDetailModal = ({ account, visible, onClose, onNavigateActions }) =>
               </View>
             )}
 
+            {/* Dispute Outcome Tracker */}
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionLabel}>LOG DISPUTE OUTCOME</Text>
+              <Text style={styles.outcomeHint}>Did you hear back on a dispute for this account?</Text>
+              <View style={styles.outcomeGrid}>
+                {DISPUTE_OUTCOMES.map(outcome => (
+                  <TouchableOpacity
+                    key={outcome.key}
+                    style={[
+                      styles.outcomeBtn,
+                      { borderColor: outcome.color + '60' },
+                      loggedOutcome === outcome.key && { backgroundColor: outcome.color + '20', borderColor: outcome.color },
+                    ]}
+                    onPress={() => handleLogOutcome(outcome)}
+                    disabled={outcomeLoading}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.outcomeBtnText, { color: outcome.color }]}>{outcome.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Notes */}
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionLabel}>NOTES</Text>
+              {notesLoading ? (
+                <Text style={styles.notesLoading}>Loading notes...</Text>
+              ) : (
+                <>
+                  {notes.map(note => (
+                    <View key={note.id} style={styles.noteItem}>
+                      <Text style={styles.noteText}>{note.content}</Text>
+                      <TouchableOpacity onPress={() => handleDeleteNote(note.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={styles.noteDelete}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  <View style={styles.noteInputRow}>
+                    <TextInput
+                      style={styles.noteInput}
+                      value={noteText}
+                      onChangeText={setNoteText}
+                      placeholder="Add a note..."
+                      placeholderTextColor={COLORS.textSecondary}
+                      multiline
+                      maxLength={500}
+                    />
+                    <TouchableOpacity
+                      style={[styles.noteAddBtn, (!noteText.trim() || savingNote) && { opacity: 0.5 }]}
+                      onPress={handleAddNote}
+                      disabled={!noteText.trim() || savingNote}
+                    >
+                      <Text style={styles.noteAddBtnText}>{savingNote ? '...' : 'Add'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+
             <TouchableOpacity style={styles.takeActionButton} onPress={onNavigateActions}>
               <Text style={styles.takeActionButtonText}>View in Action Plan</Text>
             </TouchableOpacity>
+
+            {/* Edit / Delete */}
+            <View style={styles.modalDangerRow}>
+              <TouchableOpacity style={styles.editAccountBtn} onPress={onEdit} activeOpacity={0.7}>
+                <Text style={styles.editAccountBtnText}>✏️ Edit Account</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteAccountBtn} onPress={onDelete} activeOpacity={0.7}>
+                <Text style={styles.deleteAccountBtnText}>🗑 Delete</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -204,6 +358,23 @@ const AccountsScreen = ({ navigation }) => {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [error, setError] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({});
+
+  // Create / Edit modal
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null); // null = create mode
+  const [accountForm, setAccountForm] = useState({
+    creditor: '', account_type: 'Credit Card', current_balance: '',
+    past_due_amount: '', credit_limit: '', bureau: 'Equifax', lane: 'Active Damage',
+    open_date: '', notes: '',
+  });
+  const [savingAccount, setSavingAccount] = useState(false);
+
+  const PREVIEW_COUNT = 3;
+
+  const toggleSection = (lane) => {
+    setExpandedSections(prev => ({ ...prev, [lane]: !prev[lane] }));
+  };
 
   const fetchAccounts = async () => {
     try {
@@ -237,19 +408,27 @@ const AccountsScreen = ({ navigation }) => {
   const LANE_ORDER = ['Active Damage', 'Removable', 'Aging/Monitor'];
 
   // For "All" view: build sections grouped by lane in priority order
-  const sections = LANE_ORDER.map(lane => ({
-    lane,
-    title: lane,
-    color: getLaneColor(lane),
-    data: accounts.filter(a => a.lane === lane && matchesSearch(a)),
-  })).filter(s => s.data.length > 0);
+  const sections = LANE_ORDER.map(lane => {
+    const all = accounts.filter(a => a.lane === lane && matchesSearch(a));
+    const isExpanded = !!expandedSections[lane];
+    return {
+      lane,
+      title: lane,
+      color: getLaneColor(lane),
+      totalCount: all.length,
+      data: isExpanded ? all : all.slice(0, PREVIEW_COUNT),
+    };
+  }).filter(s => s.totalCount > 0);
 
   // Add unknown lane as a catch-all
-  const unknownAccounts = accounts.filter(
-    a => !LANE_ORDER.includes(a.lane) && matchesSearch(a)
-  );
-  if (unknownAccounts.length > 0) {
-    sections.push({ lane: 'Other', title: 'Other', color: COLORS.textSecondary, data: unknownAccounts });
+  const unknownAll = accounts.filter(a => !LANE_ORDER.includes(a.lane) && matchesSearch(a));
+  if (unknownAll.length > 0) {
+    const isExpanded = !!expandedSections['Other'];
+    sections.push({
+      lane: 'Other', title: 'Other', color: COLORS.textSecondary,
+      totalCount: unknownAll.length,
+      data: isExpanded ? unknownAll : unknownAll.slice(0, PREVIEW_COUNT),
+    });
   }
 
   // For single-lane filter: flat list
@@ -258,6 +437,86 @@ const AccountsScreen = ({ navigation }) => {
   const handleAccountPress = (account) => {
     setSelectedAccount(account);
     setModalVisible(true);
+  };
+
+  const openCreateModal = () => {
+    setEditingAccount(null);
+    setAccountForm({ creditor: '', account_type: 'Credit Card', current_balance: '', past_due_amount: '', credit_limit: '', bureau: 'Equifax', lane: 'Active Damage', open_date: '', notes: '' });
+    setEditModalVisible(true);
+  };
+
+  const openEditModal = (account) => {
+    setModalVisible(false);
+    setEditingAccount(account);
+    setAccountForm({
+      creditor: account.creditor || account.account_name || '',
+      account_type: account.account_type || 'Credit Card',
+      current_balance: String(account.current_balance ?? account.balance ?? ''),
+      past_due_amount: String(account.past_due_amount ?? ''),
+      credit_limit: String(account.credit_limit ?? ''),
+      bureau: account.bureau || 'Equifax',
+      lane: account.lane || 'Active Damage',
+      open_date: account.open_date || '',
+      notes: account.notes || '',
+    });
+    setEditModalVisible(true);
+  };
+
+  const handleSaveAccount = async () => {
+    if (!accountForm.creditor.trim()) {
+      Alert.alert('Required', 'Creditor name is required.');
+      return;
+    }
+    setSavingAccount(true);
+    try {
+      const payload = {
+        creditor:         accountForm.creditor.trim(),
+        account_name:     accountForm.creditor.trim(),
+        account_type:     accountForm.account_type,
+        current_balance:  parseFloat(accountForm.current_balance) || 0,
+        past_due_amount:  parseFloat(accountForm.past_due_amount) || 0,
+        credit_limit:     parseFloat(accountForm.credit_limit) || 0,
+        bureau:           accountForm.bureau,
+        lane:             accountForm.lane,
+        open_date:        accountForm.open_date || null,
+      };
+      if (editingAccount) {
+        await accountsAPI.update(editingAccount.id, payload);
+        setAccounts(prev => prev.map(a => a.id === editingAccount.id ? { ...a, ...payload } : a));
+      } else {
+        const res = await accountsAPI.create(payload);
+        const created = res?.data ?? payload;
+        setAccounts(prev => [...prev, created]);
+      }
+      setEditModalVisible(false);
+    } catch (err) {
+      Alert.alert('Error', editingAccount ? 'Failed to update account.' : 'Failed to create account.');
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = (account) => {
+    Alert.alert(
+      'Delete Account',
+      `Remove "${account.creditor || account.account_name}" from your credit profile? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await accountsAPI.delete(account.id);
+              setAccounts(prev => prev.filter(a => a.id !== account.id));
+              setModalVisible(false);
+            } catch {
+              Alert.alert('Error', 'Failed to delete account.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Lane counts
@@ -287,6 +546,9 @@ const AccountsScreen = ({ navigation }) => {
           <Text style={styles.title}>Credit Accounts</Text>
           <Text style={styles.subtitle}>{accounts.length} accounts tracked</Text>
         </View>
+        <TouchableOpacity style={styles.addAccountBtn} onPress={openCreateModal} activeOpacity={0.7}>
+          <Text style={styles.addAccountBtnText}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -342,11 +604,29 @@ const AccountsScreen = ({ navigation }) => {
               </Text>
               <View style={[styles.sectionCount, { backgroundColor: section.color + '22' }]}>
                 <Text style={[styles.sectionCountText, { color: section.color }]}>
-                  {section.data.length}
+                  {section.totalCount}
                 </Text>
               </View>
             </View>
           )}
+          renderSectionFooter={({ section }) => {
+            if (section.totalCount <= PREVIEW_COUNT) return null;
+            const isExpanded = !!expandedSections[section.lane];
+            const hidden = section.totalCount - PREVIEW_COUNT;
+            return (
+              <TouchableOpacity
+                style={[styles.expandBtn, { borderColor: section.color + '40' }]}
+                onPress={() => toggleSection(section.lane)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.expandBtnText, { color: section.color }]}>
+                  {isExpanded
+                    ? '▲  Show less'
+                    : `▼  Show ${hidden} more`}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
           contentContainerStyle={styles.listContent}
           stickySectionHeadersEnabled={false}
           refreshControl={
@@ -403,11 +683,124 @@ const AccountsScreen = ({ navigation }) => {
         account={selectedAccount}
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        onNavigateActions={() => {
-          setModalVisible(false);
-          navigation.navigate('Actions');
-        }}
+        onNavigateActions={() => { setModalVisible(false); navigation.navigate('Actions'); }}
+        onDelete={() => handleDeleteAccount(selectedAccount)}
+        onEdit={() => openEditModal(selectedAccount)}
       />
+
+      {/* Create / Edit Account Modal */}
+      <Modal animationType="slide" transparent visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.handleBar} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{editingAccount ? 'Edit Account' : 'Add Account'}</Text>
+                <TouchableOpacity style={styles.closeButton} onPress={() => setEditModalVisible(false)}>
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Creditor */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>CREDITOR NAME *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={accountForm.creditor}
+                  onChangeText={v => setAccountForm(f => ({ ...f, creditor: v }))}
+                  placeholder="e.g. Capital One"
+                  placeholderTextColor={COLORS.textSecondary}
+                />
+              </View>
+
+              {/* Account Type */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>ACCOUNT TYPE</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {ACCOUNT_TYPES.map(t => (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.chipBtn, accountForm.account_type === t && styles.chipBtnActive]}
+                        onPress={() => setAccountForm(f => ({ ...f, account_type: t }))}
+                      >
+                        <Text style={[styles.chipBtnText, accountForm.account_type === t && styles.chipBtnTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Lane */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>LANE</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {LANE_LIST.map(l => {
+                    const lc = getLaneColor(l);
+                    const active = accountForm.lane === l;
+                    return (
+                      <TouchableOpacity
+                        key={l}
+                        style={[styles.chipBtn, active && { backgroundColor: lc + '25', borderColor: lc }]}
+                        onPress={() => setAccountForm(f => ({ ...f, lane: l }))}
+                      >
+                        <Text style={[styles.chipBtnText, active && { color: lc }]}>{l}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Bureau */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>BUREAU</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {BUREAUS_LIST.map(b => (
+                    <TouchableOpacity
+                      key={b}
+                      style={[styles.chipBtn, accountForm.bureau === b && styles.chipBtnActive]}
+                      onPress={() => setAccountForm(f => ({ ...f, bureau: b }))}
+                    >
+                      <Text style={[styles.chipBtnText, accountForm.bureau === b && styles.chipBtnTextActive]}>{b}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Amounts */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>AMOUNTS</Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formFieldLabel}>Balance</Text>
+                    <TextInput style={styles.formInput} value={accountForm.current_balance} onChangeText={v => setAccountForm(f => ({ ...f, current_balance: v }))} placeholder="0.00" placeholderTextColor={COLORS.textSecondary} keyboardType="decimal-pad" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formFieldLabel}>Past Due</Text>
+                    <TextInput style={styles.formInput} value={accountForm.past_due_amount} onChangeText={v => setAccountForm(f => ({ ...f, past_due_amount: v }))} placeholder="0.00" placeholderTextColor={COLORS.textSecondary} keyboardType="decimal-pad" />
+                  </View>
+                </View>
+                <Text style={[styles.formFieldLabel, { marginTop: 10 }]}>Credit Limit</Text>
+                <TextInput style={styles.formInput} value={accountForm.credit_limit} onChangeText={v => setAccountForm(f => ({ ...f, credit_limit: v }))} placeholder="0.00" placeholderTextColor={COLORS.textSecondary} keyboardType="decimal-pad" />
+              </View>
+
+              {/* Open Date */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>OPEN DATE (optional)</Text>
+                <TextInput style={styles.formInput} value={accountForm.open_date} onChangeText={v => setAccountForm(f => ({ ...f, open_date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={COLORS.textSecondary} />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.takeActionButton, savingAccount && { opacity: 0.6 }]}
+                onPress={handleSaveAccount}
+                disabled={savingAccount}
+              >
+                <Text style={styles.takeActionButtonText}>{savingAccount ? 'Saving...' : editingAccount ? 'Save Changes' : 'Add Account'}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -468,37 +861,39 @@ const styles = StyleSheet.create({
   },
   filtersContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 8,
+    paddingVertical: 10,
+    gap: 10,
   },
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    minHeight: 42,
+    borderRadius: 22,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: '#4B5563',
+    gap: 8,
   },
   filterPillText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F3F4F6',
+    letterSpacing: 0.2,
   },
   filterCount: {
-    backgroundColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    minWidth: 20,
+    backgroundColor: '#374151',
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    minWidth: 22,
     alignItems: 'center',
   },
   filterCountText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E5E7EB',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -535,6 +930,20 @@ const styles = StyleSheet.create({
   sectionCountText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  expandBtn: {
+    marginHorizontal: 0,
+    marginBottom: 16,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+  },
+  expandBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   // Account Card
   accountCard: {
@@ -787,10 +1196,174 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    marginBottom: 8,
   },
   takeActionButtonText: {
     color: COLORS.text,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // Dispute outcome
+  outcomeHint: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+  },
+  outcomeGrid: {
+    gap: 8,
+  },
+  outcomeBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  outcomeBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Notes
+  notesLoading: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  noteItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  noteDelete: {
+    fontSize: 13,
+    color: COLORS.danger,
+    marginLeft: 8,
+    paddingTop: 2,
+  },
+  noteInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  noteInput: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    padding: 10,
+    color: COLORS.text,
+    fontSize: 14,
+    maxHeight: 80,
+  },
+  noteAddBtn: {
+    backgroundColor: COLORS.purple,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  noteAddBtnText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  // Add account button
+  addAccountBtn: {
+    backgroundColor: COLORS.purple,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addAccountBtnText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  // Edit / Delete row in detail modal
+  modalDangerRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 20,
+    paddingHorizontal: 0,
+  },
+  editAccountBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  editAccountBtnText: {
+    color: COLORS.text,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  deleteAccountBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.danger + '15',
+    borderWidth: 1,
+    borderColor: COLORS.danger + '40',
+    alignItems: 'center',
+  },
+  deleteAccountBtnText: {
+    color: COLORS.danger,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  // Form inputs for create/edit modal
+  formInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    padding: 12,
+    color: COLORS.text,
+    fontSize: 15,
+    marginTop: 6,
+  },
+  formFieldLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  chipBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  chipBtnActive: {
+    backgroundColor: COLORS.purple + '25',
+    borderColor: COLORS.purple,
+  },
+  chipBtnText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  chipBtnTextActive: {
+    color: COLORS.purple,
     fontWeight: '600',
   },
 });

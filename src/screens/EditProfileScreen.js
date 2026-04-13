@@ -9,19 +9,21 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { smsAPI } from '../services/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const COLORS = {
   primary: '#1E40AF',
   purple: '#7C3AED',
-  background: '#0f172a',
-  card: '#111827',
-  surface: '#1e293b',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  surface: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
   success: '#059669',
@@ -58,6 +60,16 @@ const EditProfileScreen = ({ navigation }) => {
   const [error,   setError]   = useState('');
   const [saved,   setSaved]   = useState(false);
 
+  // Phone verification state
+  const [verifyVisible,  setVerifyVisible]  = useState(false);
+  const [verifyCode,     setVerifyCode]     = useState('');
+  const [verifyError,    setVerifyError]    = useState('');
+  const [verifying,      setVerifying]      = useState(false);
+  const [phoneSending,   setPhoneSending]   = useState(false);
+  const [phoneVerified,  setPhoneVerified]  = useState(!!meta.phone_verified);
+  // Track the originally saved phone so we know if the user changed it
+  const savedPhone = meta.phone ?? '';
+
   const phoneRef  = useRef(null);
   const streetRef = useRef(null);
   const cityRef   = useRef(null);
@@ -91,6 +103,42 @@ const EditProfileScreen = ({ navigation }) => {
       setError(err.message || 'Failed to save profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendVerification = async () => {
+    const cleaned = phone.trim();
+    if (!cleaned) return;
+    setPhoneSending(true);
+    setVerifyError('');
+    try {
+      await smsAPI.sendVerification(cleaned);
+      setVerifyCode('');
+      setVerifyVisible(true);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not send verification code. Check the number and try again.');
+    } finally {
+      setPhoneSending(false);
+    }
+  };
+
+  const handleConfirmVerification = async () => {
+    if (!verifyCode.trim()) {
+      setVerifyError('Please enter the 6-digit code.');
+      return;
+    }
+    setVerifying(true);
+    setVerifyError('');
+    try {
+      await smsAPI.confirmVerification(verifyCode.trim());
+      // Mark phone as verified in profile metadata
+      await updateProfile({ phone_verified: true });
+      setPhoneVerified(true);
+      setVerifyVisible(false);
+    } catch (err) {
+      setVerifyError(err?.response?.data?.error || 'Incorrect code. Please try again.');
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -144,19 +192,42 @@ const EditProfileScreen = ({ navigation }) => {
             />
           </Field>
 
-          <Field label="Phone Number">
+          <View style={styles.fieldWrap}>
+            <View style={styles.phoneLabelRow}>
+              <Text style={styles.label}>Phone Number</Text>
+              {phoneVerified && phone.trim() === savedPhone ? (
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
+                </View>
+              ) : phone.trim() && phone.trim() !== savedPhone ? (
+                <Text style={styles.unverifiedText}>Not verified</Text>
+              ) : null}
+            </View>
             <TextInput
               ref={phoneRef}
               style={styles.input}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(v) => { setPhone(v); setPhoneVerified(false); }}
               placeholder="(555) 555-5555"
               placeholderTextColor={COLORS.textSecondary}
               keyboardType="phone-pad"
               returnKeyType="next"
               onSubmitEditing={() => streetRef.current?.focus()}
             />
-          </Field>
+            {phone.trim() && (!phoneVerified || phone.trim() !== savedPhone) && (
+              <TouchableOpacity
+                style={styles.verifyPhoneBtn}
+                onPress={handleSendVerification}
+                disabled={phoneSending}
+              >
+                {phoneSending
+                  ? <ActivityIndicator size="small" color={COLORS.purple} />
+                  : <Text style={styles.verifyPhoneBtnText}>Send Verification Code</Text>
+                }
+              </TouchableOpacity>
+            )}
+            <Text style={styles.hint}>Required for SMS reminders</Text>
+          </View>
 
           {/* Mailing Address */}
           <Text style={[styles.sectionLabel, { marginTop: 8 }]}>MAILING ADDRESS</Text>
@@ -243,6 +314,61 @@ const EditProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Phone OTP verification modal */}
+      <Modal visible={verifyVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Verify Your Phone</Text>
+            <Text style={styles.modalSubtitle}>
+              We sent a 6-digit code to {phone.trim()}. Enter it below to activate SMS reminders.
+            </Text>
+
+            <TextInput
+              style={[styles.input, styles.otpInput]}
+              value={verifyCode}
+              onChangeText={setVerifyCode}
+              placeholder="000000"
+              placeholderTextColor={COLORS.textSecondary}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+            />
+
+            {!!verifyError && (
+              <Text style={styles.otpError}>{verifyError}</Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.saveBtn, verifying && styles.saveBtnDisabled, { marginTop: 8 }]}
+              onPress={handleConfirmVerification}
+              disabled={verifying}
+            >
+              {verifying
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.saveBtnText}>Confirm Code</Text>
+              }
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.resendBtn}
+              onPress={handleSendVerification}
+              disabled={phoneSending}
+            >
+              <Text style={styles.resendBtnText}>
+                {phoneSending ? 'Sending...' : 'Resend Code'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelVerifyBtn}
+              onPress={() => setVerifyVisible(false)}
+            >
+              <Text style={styles.cancelVerifyBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -378,6 +504,104 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
     fontWeight: '700',
+  },
+  // Phone verification
+  phoneLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  verifiedBadge: {
+    backgroundColor: COLORS.success + '25',
+    borderWidth: 1,
+    borderColor: COLORS.success + '50',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  verifiedBadgeText: {
+    fontSize: 11,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
+  unverifiedText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  verifyPhoneBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.purple + '60',
+    borderRadius: 10,
+    backgroundColor: COLORS.purple + '15',
+  },
+  verifyPhoneBtnText: {
+    fontSize: 13,
+    color: COLORS.purple,
+    fontWeight: '600',
+  },
+  // OTP modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  otpInput: {
+    textAlign: 'center',
+    fontSize: 28,
+    fontWeight: 'bold',
+    letterSpacing: 8,
+  },
+  otpError: {
+    color: COLORS.danger,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  resendBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  resendBtnText: {
+    color: COLORS.purple,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  cancelVerifyBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  cancelVerifyBtnText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
 });
 

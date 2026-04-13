@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -10,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { aiAPI } from '../services/api';
+import { aiAPI, accountsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
@@ -20,21 +21,25 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#F59E0B',
+  alertAmber: '#F97316',
   errorRed: '#DC2626',
-  background: '#0f172a',
-  card: '#111827',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#F59E0B',
+  warning: '#F97316',
   success: '#059669',
   purple: '#7C3AED',
   high: '#DC2626',
-  medium: '#F59E0B',
+  medium: '#F97316',
   low: '#059669',
 };
+
+const TASKS_KEY = (userId) => `@cs_plan_tasks_${userId}`;
+const PLAN_CACHE_KEY = (userId) => `@cs_action_plan_${userId}`;
+const PLAN_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 const ActionPlanScreen = () => {
   const { user } = useAuth();
@@ -44,14 +49,34 @@ const ActionPlanScreen = () => {
   const [error, setError] = useState(null);
   const [expandedSection, setExpandedSection] = useState('days1-30');
   const [completedTasks, setCompletedTasks] = useState(new Set());
+  const persistedRef = useRef(false);
 
-  const fetchPlan = async () => {
+  const fetchPlan = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await aiAPI.getActionPlan();
+
+      // Check cache unless force-refreshing
+      if (!forceRefresh && user?.id) {
+        try {
+          const cached = await AsyncStorage.getItem(PLAN_CACHE_KEY(user.id));
+          if (cached) {
+            const { plan: cachedPlan, savedAt } = JSON.parse(cached);
+            if (cachedPlan && Date.now() - savedAt < PLAN_CACHE_TTL) {
+              setPlan(cachedPlan);
+              setLoading(false);
+              setRefreshing(false);
+              return;
+            }
+          }
+        } catch {}
+      }
+
+      // Fetch accounts first so the AI has data to analyze
+      const accountsRes = await accountsAPI.getAll().catch(() => ({ data: [] }));
+      const accounts = accountsRes.data || [];
+      const response = await aiAPI.getActionPlan(accounts);
       const raw = response.data || response;
-      console.log('[ActionPlan] raw response:', JSON.stringify(raw, null, 2));
 
       // Unwrap nested envelope if backend wraps in plan/action_plan/data
       const base = raw?.plan || raw?.action_plan || raw?.data || raw;
@@ -64,9 +89,11 @@ const ActionPlanScreen = () => {
         days61to90: base?.days_90 || base?.days61to90 || null,
         potentialPoints: base?.potential_points || base?.potentialPoints || base?.target_score_gain || null,
       };
-
-      console.log('[ActionPlan] normalized plan keys:', Object.keys(normalizedPlan || {}));
       setPlan(normalizedPlan);
+      // Persist to cache
+      if (user?.id) {
+        AsyncStorage.setItem(PLAN_CACHE_KEY(user.id), JSON.stringify({ plan: normalizedPlan, savedAt: Date.now() })).catch(() => null);
+      }
     } catch (err) {
       console.error('[ActionPlan] error:', err?.response?.data || err.message);
       setError(err?.response?.data?.error || err?.response?.data?.message || 'Failed to load action plan');
@@ -76,6 +103,20 @@ const ActionPlanScreen = () => {
     }
   };
 
+  // Load persisted completed tasks from AsyncStorage
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(TASKS_KEY(user.id)).then(val => {
+      if (val) {
+        try {
+          const arr = JSON.parse(val);
+          if (Array.isArray(arr)) setCompletedTasks(new Set(arr));
+        } catch {}
+      }
+      persistedRef.current = true;
+    });
+  }, [user?.id]);
+
   useEffect(() => {
     if (user?.id) {
       fetchPlan();
@@ -84,7 +125,7 @@ const ActionPlanScreen = () => {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchPlan();
+    fetchPlan(true);
   }, []);
 
   const getPriorityColor = (priority) => {
@@ -111,6 +152,10 @@ const ActionPlanScreen = () => {
         next.delete(taskKey);
       } else {
         next.add(taskKey);
+      }
+      // Persist to AsyncStorage
+      if (user?.id) {
+        AsyncStorage.setItem(TASKS_KEY(user.id), JSON.stringify([...next])).catch(() => null);
       }
       return next;
     });
@@ -243,7 +288,15 @@ const ActionPlanScreen = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Your 30/60/90 Day Action Plan</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Your 30/60/90 Day Plan</Text>
+            <TouchableOpacity
+              style={styles.regenerateBtn}
+              onPress={() => { setRefreshing(true); fetchPlan(true); }}
+            >
+              <Text style={styles.regenerateBtnText}>↺ Regenerate</Text>
+            </TouchableOpacity>
+          </View>
           {plan?.summary && (
             <Text style={styles.summary}>{plan.summary}</Text>
           )}
@@ -342,11 +395,30 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 24,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 8,
+    flex: 1,
+  },
+  regenerateBtn: {
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  regenerateBtnText: {
+    fontSize: 13,
+    color: COLORS.purple,
+    fontWeight: '600',
   },
   summary: {
     fontSize: 14,

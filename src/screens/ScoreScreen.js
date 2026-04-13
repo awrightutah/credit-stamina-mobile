@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Path, G, Line, Circle } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
-import { scoresAPI } from '../services/api';
+import { scoresAPI, aiAPI, pointsAPI } from '../services/api';
 import COLORS from '../theme/colors';
 
 const { width } = Dimensions.get('window');
@@ -72,72 +73,46 @@ const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// ─── Semicircle Gauge ─────────────────────────────────────────────────────────
-const ScoreGauge = ({ score }) => {
-  const pct = Math.min(1, Math.max(0, (score - 300) / 550));
-  const angle = pct * 180; // 0° (300) → 180° (850)
-  const color = getScoreColor(score);
+// ─── SVG Score Gauge (exact replica of PWA gauge) ────────────────────────────
+// PWA viewBox="0 0 200 110", arc radius 85, stroke-width 14, needle to y=-72
+const GAUGE_W = Math.min(width - 48, 320);
+const GAUGE_SCALE = GAUGE_W / 200; // scale from 200-unit viewBox
 
-  const leftDeg  = Math.min(0, angle - 90);
-  const rightDeg = angle > 90 ? angle - 180 : -90;
-  const showRight = angle > 90;
-  const innerSize = GAUGE_SIZE - STROKE * 2;
+const ScoreGauge = ({ score }) => {
+  const safeScore = Math.min(850, Math.max(300, score || 300));
+  // Needle angle: -90° at 300, +90° at 850 (matches PWA formula)
+  const needleAngle = -90 + ((safeScore - 300) / 550) * 180;
+  const color = getScoreColor(safeScore);
 
   return (
     <View style={gaugeStyles.wrapper}>
-      <View style={[gaugeStyles.arcClip, { width: GAUGE_SIZE, height: GAUGE_SIZE / 2 + STROKE / 2 }]}>
-        {/* Gray track */}
-        <View style={[gaugeStyles.ring, {
-          width: GAUGE_SIZE, height: GAUGE_SIZE,
-          borderRadius: GAUGE_SIZE / 2,
-          borderWidth: STROKE,
-          borderColor: '#1F2937',
-        }]} />
+      <Svg
+        width={GAUGE_W}
+        height={GAUGE_W * 110 / 200}
+        viewBox="0 0 200 110"
+      >
+        {/* Arc segments — exact PWA coordinates */}
+        <Path d="M 15,100 A 85,85 0 0,1 43,32"  stroke="#DC2626" strokeWidth="14" fill="none" strokeLinecap="round" />
+        <Path d="M 43,32 A 85,85 0 0,1 80,12"   stroke="#EF4444" strokeWidth="14" fill="none" strokeLinecap="round" />
+        <Path d="M 80,12 A 85,85 0 0,1 120,12"  stroke="#F59E0B" strokeWidth="14" fill="none" strokeLinecap="round" />
+        <Path d="M 120,12 A 85,85 0 0,1 157,32" stroke="#84CC16" strokeWidth="14" fill="none" strokeLinecap="round" />
+        <Path d="M 157,32 A 85,85 0 0,1 185,100" stroke="#059669" strokeWidth="14" fill="none" strokeLinecap="round" />
 
-        {/* Left fill */}
-        {angle > 0 && (
-          <View style={[gaugeStyles.halfClip, { left: 0, width: GAUGE_SIZE / 2 }]}>
-            <View style={[gaugeStyles.ring, {
-              left: 0,
-              width: GAUGE_SIZE, height: GAUGE_SIZE,
-              borderRadius: GAUGE_SIZE / 2,
-              borderWidth: STROKE,
-              borderColor: color,
-              transform: [{ rotate: `${leftDeg}deg` }],
-            }]} />
-          </View>
-        )}
+        {/* Needle — pivots at (100,100) */}
+        <G transform={`translate(100,100) rotate(${needleAngle})`}>
+          <Line x1="0" y1="0" x2="0" y2="-72" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+          <Circle cx="0" cy="0" r="6" fill="white" />
+        </G>
+      </Svg>
 
-        {/* Right fill */}
-        {showRight && (
-          <View style={[gaugeStyles.halfClip, { right: 0, width: GAUGE_SIZE / 2 }]}>
-            <View style={[gaugeStyles.ring, {
-              right: 0,
-              width: GAUGE_SIZE, height: GAUGE_SIZE,
-              borderRadius: GAUGE_SIZE / 2,
-              borderWidth: STROKE,
-              borderColor: color,
-              transform: [{ rotate: `${rightDeg}deg` }],
-            }]} />
-          </View>
-        )}
-
-        {/* Inner cap */}
-        <View style={[gaugeStyles.innerCap, {
-          width: innerSize, height: innerSize,
-          borderRadius: innerSize / 2,
-          left: STROKE, top: STROKE,
-        }]} />
-      </View>
-
-      {/* Score number + label */}
+      {/* Score number + label below gauge */}
       <View style={gaugeStyles.scoreText}>
-        <Text style={[gaugeStyles.scoreNumber, { color }]}>{score}</Text>
-        <Text style={[gaugeStyles.scoreRating, { color }]}>{getScoreLabel(score)}</Text>
+        <Text style={[gaugeStyles.scoreNumber, { color }]}>{safeScore}</Text>
+        <Text style={[gaugeStyles.scoreRating, { color }]}>{getScoreLabel(safeScore)}</Text>
       </View>
 
       {/* 300 / 850 range labels */}
-      <View style={[gaugeStyles.rangeLabels, { width: GAUGE_SIZE }]}>
+      <View style={[gaugeStyles.rangeLabels, { width: GAUGE_W }]}>
         <Text style={gaugeStyles.rangeLabel}>300</Text>
         <Text style={gaugeStyles.rangeLabel}>850</Text>
       </View>
@@ -146,19 +121,15 @@ const ScoreGauge = ({ score }) => {
 };
 
 const gaugeStyles = StyleSheet.create({
-  wrapper: { alignItems: 'center' },
-  arcClip: { overflow: 'hidden', position: 'relative' },
-  ring: { position: 'absolute', top: 0 },
-  halfClip: { position: 'absolute', top: 0, height: GAUGE_SIZE, overflow: 'hidden' },
-  innerCap: { position: 'absolute', backgroundColor: COLORS.card },
-  scoreText: { alignItems: 'center', marginTop: 8 },
-  scoreNumber: { fontSize: 64, fontWeight: 'bold', lineHeight: 72 },
+  wrapper:     { alignItems: 'center' },
+  scoreText:   { alignItems: 'center', marginTop: 4 },
+  scoreNumber: { fontSize: 64, fontWeight: '800', lineHeight: 72 },
   scoreRating: { fontSize: 18, fontWeight: '600', marginTop: 2 },
   rangeLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: STROKE / 2,
-    marginTop: 6,
+    paddingHorizontal: 8,
+    marginTop: 4,
   },
   rangeLabel: { fontSize: 11, color: COLORS.textSecondary },
 });
@@ -267,8 +238,40 @@ const progressStyles = StyleSheet.create({
   ptsLeft: { fontSize: 12, color: COLORS.textSecondary },
 });
 
+// ─── Tips response normalizer ─────────────────────────────────────────────────
+// Handles every shape the backend might return from /api/score-improvement-tips
+const extractTips = (raw) => {
+  if (!raw) return null;
+  // Walk known array-of-tips field names
+  for (const key of ['tips', 'recommendations', 'suggestions', 'advice', 'actions', 'steps', 'items', 'data']) {
+    if (Array.isArray(raw[key])) {
+      return raw[key].map(t =>
+        typeof t === 'string' ? t : (t?.text || t?.tip || t?.recommendation || t?.description || t?.action || null)
+      ).filter(Boolean);
+    }
+  }
+  // Raw itself is an array of strings or objects
+  if (Array.isArray(raw)) {
+    return raw.map(t =>
+      typeof t === 'string' ? t : (t?.text || t?.tip || t?.recommendation || t?.description || null)
+    ).filter(Boolean);
+  }
+  // Single string fields
+  for (const key of ['advice', 'response', 'content', 'summary', 'text', 'message']) {
+    if (typeof raw[key] === 'string' && raw[key].length > 10) {
+      // Split on newlines or bullet chars so we can render as a list
+      const lines = raw[key]
+        .split(/\n+/)
+        .map(l => l.replace(/^[-•*\d.)\s]+/, '').trim())
+        .filter(l => l.length > 5);
+      return lines.length > 0 ? lines : [raw[key]];
+    }
+  }
+  return null;
+};
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
-const ScoreScreen = () => {
+const ScoreScreen = ({ route }) => {
   const { user } = useAuth();
   const [scores, setScores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -286,6 +289,10 @@ const ScoreScreen = () => {
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [scoreGoal, setScoreGoal] = useState(700);
   const [goalInput, setGoalInput] = useState('700');
+
+  // AI score tips
+  const [aiTips, setAiTips] = useState(null);
+  const [tipsLoading, setTipsLoading] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(GOAL_KEY).then(val => {
@@ -314,6 +321,13 @@ const ScoreScreen = () => {
       );
       setScores(sorted);
       setError(null);
+
+      // Fetch AI score tips for the latest score
+      if (sorted.length > 0) {
+        const latest = sorted[0];
+        const next = getNextTier(latest.score);
+        fetchAiTips(latest.score, next?.label || 'Exceptional', next?.pts || 0);
+      }
     } catch (err) {
       setError('Failed to load scores');
       console.error(err);
@@ -321,6 +335,43 @@ const ScoreScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const fetchAiTips = async (currentScore, targetTier, pointsNeeded) => {
+    try {
+      setTipsLoading(true);
+      const res = await aiAPI.getScoreTips(currentScore, targetTier, pointsNeeded);
+      const raw = res?.data || res;
+
+      const parsed = extractTips(raw);
+      if (parsed && parsed.length > 0) setAiTips(parsed);
+    } catch (e) {
+      console.error('[ScoreScreen] tips error:', e?.response?.data || e.message);
+    } finally {
+      setTipsLoading(false);
+    }
+  };
+
+  const handleDeleteScore = (id) => {
+    Alert.alert(
+      'Delete Score Entry',
+      'Remove this score from your history?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await scoresAPI.delete(id);
+              setScores(prev => prev.filter(s => s.id !== id));
+            } catch {
+              Alert.alert('Error', 'Failed to delete score. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddScore = async () => {
@@ -339,6 +390,8 @@ const ScoreScreen = () => {
         newNotes.trim() || null,
         user?.id
       );
+      // Award points for logging a score (non-blocking)
+      pointsAPI.award('log_score', `Logged ${newBureau} score: ${scoreNum}`, 25).catch(() => null);
       setLogModalVisible(false);
       setNewScore('');
       setNewNotes('');
@@ -375,8 +428,11 @@ const ScoreScreen = () => {
     setLogModalVisible(true);
   };
 
-  // Derived data
-  const latestScore   = scores[0] ?? null;
+  // Derived data — if a bureau param is passed (e.g. from Dashboard tap), highlight that bureau
+  const requestedBureau = route?.params?.bureau ?? null;
+  const latestScore = requestedBureau
+    ? (scores.find(s => s.bureau === requestedBureau) ?? scores[0] ?? null)
+    : (scores[0] ?? null);
   const chartScores   = [...scores].reverse(); // oldest → newest for chart
   const baselineScore = chartScores[0]?.score ?? null;
   const nextTier      = latestScore ? getNextTier(latestScore.score) : null;
@@ -486,8 +542,70 @@ const ScoreScreen = () => {
               </Text>
             </View>
 
+            {/* Multi-bureau comparison */}
+            {(() => {
+              const bureauLatest = BUREAUS.reduce((acc, b) => {
+                const match = scores.find(s => s.bureau === b);
+                if (match) acc[b] = match;
+                return acc;
+              }, {});
+              const bureauEntries = Object.entries(bureauLatest);
+              if (bureauEntries.length < 2) return null;
+              return (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Bureau Comparison</Text>
+                  {bureauEntries.map(([bureau, s]) => {
+                    const color = getScoreColor(s.score);
+                    const pct = Math.min(100, Math.max(0, ((s.score - 300) / 550) * 100));
+                    return (
+                      <View key={bureau} style={styles.bureauCompRow}>
+                        <Text style={styles.bureauCompName}>{bureau}</Text>
+                        <View style={styles.bureauCompBar}>
+                          <View style={[styles.bureauCompFill, { width: `${pct}%`, backgroundColor: color }]} />
+                        </View>
+                        <Text style={[styles.bureauCompScore, { color }]}>{s.score}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
             {/* Score history chart */}
             {renderChart()}
+
+            {/* Score history list with delete */}
+            {scores.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Logged Scores</Text>
+                {scores.map((s, i) => {
+                  const color = getScoreColor(s.score);
+                  return (
+                    <View
+                      key={s.id ?? `score-${i}`}
+                      style={[styles.scoreRow, i < scores.length - 1 && styles.scoreRowBorder]}
+                    >
+                      <View style={[styles.scoreBureauDot, { backgroundColor: color }]} />
+                      <View style={styles.scoreRowInfo}>
+                        <Text style={styles.scoreRowBureau}>{s.bureau ?? '—'}</Text>
+                        <Text style={styles.scoreRowDate}>
+                          {formatDate(s.recorded_date || s.reported_at)}
+                        </Text>
+                        {s.notes ? <Text style={styles.scoreRowNotes} numberOfLines={1}>{s.notes}</Text> : null}
+                      </View>
+                      <Text style={[styles.scoreRowValue, { color }]}>{s.score}</Text>
+                      <TouchableOpacity
+                        style={styles.scoreDeleteBtn}
+                        onPress={() => handleDeleteScore(s.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.scoreDeleteBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
 
             {/* FICO range legend */}
             <View style={styles.section}>
@@ -504,6 +622,27 @@ const ScoreScreen = () => {
                   <Text style={styles.rangeText}>{label}</Text>
                 </View>
               ))}
+            </View>
+
+            {/* AI Score Tips */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>🤖 AI Score Tips</Text>
+              {tipsLoading ? (
+                <View style={styles.tipsLoading}>
+                  <Text style={styles.tipsLoadingText}>Generating personalized tips...</Text>
+                </View>
+              ) : aiTips && aiTips.length > 0 ? (
+                aiTips.map((tip, i) => (
+                  <View key={i} style={styles.tipRow}>
+                    <Text style={styles.tipBullet}>•</Text>
+                    <Text style={styles.tipText}>{tip}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.mutedText}>
+                  Log a score to get personalized improvement tips.
+                </Text>
+              )}
             </View>
           </>
         )}
@@ -663,13 +802,15 @@ const styles = StyleSheet.create({
   },
   retryText: { color: COLORS.text, fontWeight: '600' },
 
-  // Gauge card
+  // Gauge card — matches PWA #1E293B card
   gaugeCard: {
     margin: 20,
-    backgroundColor: COLORS.card,
+    backgroundColor: '#1E293B',
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
   },
   bureauChip: {
     alignSelf: 'flex-start',
@@ -708,9 +849,11 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: COLORS.card,
+    backgroundColor: '#1E293B',
     borderRadius: 16,
     padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
   },
   sectionTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text, marginBottom: 16 },
   chartScroll: { flexDirection: 'row', alignItems: 'flex-end', paddingBottom: 4 },
@@ -724,6 +867,93 @@ const styles = StyleSheet.create({
   rangeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   rangeDot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
   rangeText: { color: COLORS.textSecondary, fontSize: 14 },
+
+  // Bureau comparison
+  bureauCompRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bureauCompName: {
+    width: 90,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  bureauCompBar: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#1F2937',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginHorizontal: 10,
+  },
+  bureauCompFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  bureauCompScore: {
+    width: 36,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  // Score history list
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  scoreRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
+  },
+  scoreBureauDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+  },
+  scoreRowInfo: {
+    flex: 1,
+  },
+  scoreRowBureau: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  scoreRowDate: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  scoreRowNotes: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  scoreRowValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginRight: 12,
+  },
+  scoreDeleteBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#DC262620',
+  },
+  scoreDeleteBtnText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  // AI tips
+  tipsLoading: { paddingVertical: 8 },
+  tipsLoadingText: { color: COLORS.textSecondary, fontSize: 13, fontStyle: 'italic' },
+  tipRow: { flexDirection: 'row', marginBottom: 10 },
+  tipBullet: { color: COLORS.powerPurple, fontSize: 16, marginRight: 8, lineHeight: 20 },
+  tipText: { flex: 1, color: COLORS.textSecondary, fontSize: 14, lineHeight: 20 },
 
   // Modals
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },

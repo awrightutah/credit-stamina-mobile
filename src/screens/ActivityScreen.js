@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { activityAPI } from '../services/api';
+
+const FILTER_STORAGE_KEY = '@activity_filter';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -19,15 +22,15 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#F59E0B',
+  alertAmber: '#F97316',
   errorRed: '#DC2626',
-  background: '#0f172a',
-  card: '#111827',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#F59E0B',
+  warning: '#F97316',
   success: '#059669',
   purple: '#7C3AED',
 };
@@ -38,6 +41,21 @@ const ActivityScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activities, setActivities] = useState([]);
   const [filter, setFilter] = useState('all');
+  const filterInitialised = useRef(false);
+
+  // Restore persisted filter on mount
+  useEffect(() => {
+    AsyncStorage.getItem(FILTER_STORAGE_KEY)
+      .then(val => { if (val) setFilter(val); })
+      .catch(() => null)
+      .finally(() => { filterInitialised.current = true; });
+  }, []);
+
+  // Persist filter whenever it changes (skip the initial mount value)
+  useEffect(() => {
+    if (!filterInitialised.current) return;
+    AsyncStorage.setItem(FILTER_STORAGE_KEY, filter).catch(() => null);
+  }, [filter]);
 
   const fetchActivities = async () => {
     try {
@@ -62,30 +80,82 @@ const ActivityScreen = ({ navigation }) => {
 
   const getActivityIcon = (type) => {
     switch (type) {
-      case 'score_logged': return '📊';
-      case 'account_added': return '🏦';
-      case 'action_completed': return '✅';
-      case 'letter_sent': return '✉️';
-      case 'upload': return '📄';
-      case 'dispute': return '📝';
-      case 'quick_win': return '🎯';
-      case 'budget_update': return '💰';
-      default: return '📌';
+      case 'score_logged':          return '📊';
+      case 'account_added':         return '🏦';
+      case 'action_completed':      return '✅';
+      case 'action_dismissed':      return '🚫';
+      case 'letter_generated':      return '✍️';
+      case 'letter_sent':           return '✉️';
+      case 'letter_delivered':      return '📬';
+      case 'letter_responded':      return '📩';
+      case 'letter_escalated':      return '⚡';
+      case 'upload':                return '📄';
+      case 'report_uploaded':       return '📄';
+      case 'dispute':               return '📝';
+      case 'quick_win':             return '🎯';
+      case 'quick_wins_generated':  return '🎯';
+      case 'budget_update':         return '💰';
+      case 'family_invited':        return '👨‍👩‍👧';
+      case 'subscription_changed':  return '💎';
+      case 'ai_analysis_run':       return '🤖';
+      case 'score_prediction_run':  return '🔮';
+      default:                      return '📌';
     }
   };
 
   const getActivityColor = (type) => {
     switch (type) {
-      case 'score_logged': return COLORS.primary;
-      case 'account_added': return COLORS.secondary;
-      case 'action_completed': return COLORS.success;
-      case 'letter_sent': return COLORS.warning;
-      case 'upload': return COLORS.purple;
-      case 'dispute': return COLORS.danger;
-      case 'quick_win': return COLORS.success;
-      case 'budget_update': return COLORS.success;
-      default: return COLORS.textSecondary;
+      case 'score_logged':          return COLORS.primary;
+      case 'score_prediction_run':  return COLORS.primary;
+      case 'account_added':         return COLORS.secondary;
+      case 'action_completed':      return COLORS.success;
+      case 'quick_win':
+      case 'quick_wins_generated':  return COLORS.success;
+      case 'budget_update':         return COLORS.success;
+      case 'action_dismissed':      return COLORS.textSecondary;
+      case 'letter_generated':      return COLORS.warning;
+      case 'letter_sent':           return COLORS.warning;
+      case 'letter_delivered':      return COLORS.purple;
+      case 'letter_responded':      return COLORS.primary;
+      case 'letter_escalated':      return COLORS.danger;
+      case 'upload':
+      case 'report_uploaded':       return COLORS.purple;
+      case 'dispute':               return COLORS.danger;
+      case 'family_invited':        return '#EC4899';
+      case 'subscription_changed':  return '#F59E0B';
+      case 'ai_analysis_run':       return COLORS.purple;
+      default:                      return COLORS.textSecondary;
     }
+  };
+
+  const handleActivityPress = (activity) => {
+    const letterTypes  = ['letter_generated','letter_sent','letter_delivered','letter_responded','letter_escalated','dispute'];
+    const scoreTypes   = ['score_logged','score_prediction_run'];
+    const accountTypes = ['account_added','ai_analysis_run','report_uploaded','upload'];
+    const budgetTypes  = ['budget_update'];
+    const actionTypes  = ['action_completed','action_dismissed','quick_win','quick_wins_generated'];
+    if (letterTypes.includes(activity.type)) {
+      const letterId = activity.metadata?.letter_id;
+      navigation.navigate('Letters', letterId ? { openLetterId: letterId } : undefined);
+    } else if (scoreTypes.includes(activity.type)) {
+      navigation.navigate('Score');
+    } else if (accountTypes.includes(activity.type)) {
+      navigation.navigate('Accounts');
+    } else if (budgetTypes.includes(activity.type)) {
+      navigation.navigate('Budget');
+    } else if (actionTypes.includes(activity.type)) {
+      navigation.navigate('Actions');
+    }
+  };
+
+  const isNavigable = (type) => {
+    return [
+      'letter_generated','letter_sent','letter_delivered','letter_responded','letter_escalated','dispute',
+      'score_logged','score_prediction_run',
+      'account_added','ai_analysis_run','report_uploaded','upload',
+      'budget_update',
+      'action_completed','action_dismissed','quick_win','quick_wins_generated',
+    ].includes(type);
   };
 
   const formatDate = (dateString) => {
@@ -104,19 +174,30 @@ const ActivityScreen = ({ navigation }) => {
   };
 
   const filterOptions = [
-    { key: 'all', label: 'All' },
-    { key: 'scores', label: 'Scores' },
-    { key: 'accounts', label: 'Accounts' },
-    { key: 'actions', label: 'Actions' },
+    { key: 'all',     label: 'All'     },
     { key: 'letters', label: 'Letters' },
+    { key: 'scores',  label: 'Scores'  },
+    { key: 'reports', label: 'Reports' },
+    { key: 'actions', label: 'Actions' },
+    { key: 'family',  label: 'Family'  },
+    { key: 'ai',      label: 'AI'      },
   ];
 
+  const LETTER_TYPES  = ['letter_generated','letter_sent','letter_delivered','letter_responded','letter_escalated','dispute'];
+  const SCORE_TYPES   = ['score_logged','score_prediction_run'];
+  const REPORT_TYPES  = ['upload','report_uploaded','account_added','ai_analysis_run'];
+  const ACTION_TYPES  = ['action_completed','action_dismissed','quick_win','quick_wins_generated','budget_update'];
+  const FAMILY_TYPES  = ['family_invited','subscription_changed'];
+  const AI_TYPES      = ['ai_analysis_run','ai_advisor_used','score_prediction_run','quick_wins_generated'];
+
   const filteredActivities = activities.filter(activity => {
-    if (filter === 'all') return true;
-    if (filter === 'scores') return activity.type === 'score_logged';
-    if (filter === 'accounts') return activity.type === 'account_added' || activity.type === 'upload';
-    if (filter === 'actions') return activity.type === 'action_completed' || activity.type === 'quick_win';
-    if (filter === 'letters') return activity.type === 'letter_sent' || activity.type === 'dispute';
+    if (filter === 'all')     return true;
+    if (filter === 'letters') return LETTER_TYPES.includes(activity.type);
+    if (filter === 'scores')  return SCORE_TYPES.includes(activity.type);
+    if (filter === 'reports') return REPORT_TYPES.includes(activity.type);
+    if (filter === 'actions') return ACTION_TYPES.includes(activity.type);
+    if (filter === 'family')  return FAMILY_TYPES.includes(activity.type);
+    if (filter === 'ai')      return AI_TYPES.includes(activity.type);
     return true;
   });
 
@@ -197,27 +278,38 @@ const ActivityScreen = ({ navigation }) => {
                  new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
               </Text>
               
-              {groupedActivities[date].map((activity, index) => (
-                <View key={activity.id || index} style={styles.activityCard}>
-                  <View style={[styles.activityIcon, { backgroundColor: getActivityColor(activity.type) + '20' }]}>
-                    <Text style={styles.activityIconText}>{getActivityIcon(activity.type)}</Text>
-                  </View>
-                  
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>{activity.title}</Text>
-                    {activity.description && (
-                      <Text style={styles.activityDescription}>{activity.description}</Text>
-                    )}
-                    <Text style={styles.activityTime}>{formatDate(activity.created_at)}</Text>
-                  </View>
-
-                  {activity.points && (
-                    <View style={styles.pointsBadge}>
-                      <Text style={styles.pointsText}>+{activity.points}</Text>
+              {groupedActivities[date].map((activity, index) => {
+                const navigable = isNavigable(activity.type);
+                const color = getActivityColor(activity.type);
+                return (
+                  <TouchableOpacity
+                    key={activity.id || index}
+                    style={styles.activityCard}
+                    onPress={() => handleActivityPress(activity)}
+                    activeOpacity={navigable ? 0.7 : 1}
+                  >
+                    <View style={[styles.activityIcon, { backgroundColor: color + '20' }]}>
+                      <Text style={styles.activityIconText}>{getActivityIcon(activity.type)}</Text>
                     </View>
-                  )}
-                </View>
-              ))}
+
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityTitle}>{activity.title}</Text>
+                      {activity.description && (
+                        <Text style={styles.activityDescription}>{activity.description}</Text>
+                      )}
+                      <Text style={styles.activityTime}>{formatDate(activity.created_at)}</Text>
+                    </View>
+
+                    {activity.points ? (
+                      <View style={styles.pointsBadge}>
+                        <Text style={styles.pointsText}>+{activity.points}</Text>
+                      </View>
+                    ) : navigable ? (
+                      <Text style={{ color: COLORS.textSecondary, fontSize: 16 }}>›</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ))
         )}

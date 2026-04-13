@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,19 +12,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { smsAPI } from '../services/api';
+import { smsAPI, authAPI } from '../services/api';
 
 const COLORS = {
   staminaBlue: '#1E40AF',
   powerPurple: '#7C3AED',
-  background: '#0f172a',
-  card: '#111827',
-  surface: '#1e293b',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  surface: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#F59E0B',
+  warning: '#F97316',
   success: '#059669',
   purple: '#7C3AED',
 };
@@ -84,15 +84,64 @@ const SettingsScreen = () => {
   const [scoreUpdates, setScoreUpdates] = useState(true);
   const [weeklySummary, setWeeklySummary] = useState(true);
 
+  // Load saved SMS preferences from backend on mount
+  useEffect(() => {
+    smsAPI.getPreferences().then(res => {
+      const prefs = res?.data?.preferences ?? res?.data ?? {};
+      if (typeof prefs.sms_enabled === 'boolean') setSmsNotifications(prefs.sms_enabled);
+      if (typeof prefs.email_enabled === 'boolean') setEmailNotifications(prefs.email_enabled);
+      if (typeof prefs.action_reminders === 'boolean') setActionReminders(prefs.action_reminders);
+      if (typeof prefs.score_updates === 'boolean') setScoreUpdates(prefs.score_updates);
+      if (typeof prefs.weekly_summary === 'boolean') setWeeklySummary(prefs.weekly_summary);
+    }).catch(() => null); // silent — defaults are fine
+  }, []);
+
+  const savePreferences = (patch) => {
+    const prefs = {
+      sms_enabled:      smsNotifications,
+      email_enabled:    emailNotifications,
+      action_reminders: actionReminders,
+      score_updates:    scoreUpdates,
+      weekly_summary:   weeklySummary,
+      ...patch,
+    };
+    smsAPI.updatePreferences(prefs).catch(() => null);
+  };
+
   const handleSmsToggle = async (value) => {
     setSmsNotifications(value);
-    if (value) {
+    if (value && !user?.user_metadata?.phone) {
       Alert.alert(
-        'Enable SMS',
-        'To enable SMS notifications we need your phone number. This can be configured from the web app at app.creditstamina.com.',
-        [{ text: 'OK' }]
+        'Phone Number Required',
+        'Add your phone number in Edit Profile to receive SMS alerts.',
+        [
+          { text: 'Cancel', onPress: () => setSmsNotifications(false) },
+          { text: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
+        ]
       );
+      return;
     }
+    savePreferences({ sms_enabled: value });
+  };
+
+  const handleEmailToggle = (value) => {
+    setEmailNotifications(value);
+    savePreferences({ email_enabled: value });
+  };
+
+  const handleActionRemindersToggle = (value) => {
+    setActionReminders(value);
+    savePreferences({ action_reminders: value });
+  };
+
+  const handleScoreUpdatesToggle = (value) => {
+    setScoreUpdates(value);
+    savePreferences({ score_updates: value });
+  };
+
+  const handleWeeklySummaryToggle = (value) => {
+    setWeeklySummary(value);
+    savePreferences({ weekly_summary: value });
   };
 
   const handleClearCache = () => {
@@ -173,11 +222,11 @@ const SettingsScreen = () => {
             title="Email Notifications"
             subtitle="Weekly summaries and updates"
             value={emailNotifications}
-            onChange={setEmailNotifications}
+            onChange={handleEmailToggle}
           />
           <ToggleRow
             title="SMS Notifications"
-            subtitle="Text message alerts"
+            subtitle="Text message alerts (requires phone number)"
             value={smsNotifications}
             onChange={handleSmsToggle}
             last
@@ -190,19 +239,19 @@ const SettingsScreen = () => {
             title="Action Reminders"
             subtitle="Get reminded about pending actions"
             value={actionReminders}
-            onChange={setActionReminders}
+            onChange={handleActionRemindersToggle}
           />
           <ToggleRow
             title="Score Update Alerts"
             subtitle="Notify when bureau scores change"
             value={scoreUpdates}
-            onChange={setScoreUpdates}
+            onChange={handleScoreUpdatesToggle}
           />
           <ToggleRow
             title="Weekly Progress Summary"
             subtitle="Receive a weekly digest of your progress"
             value={weeklySummary}
-            onChange={setWeeklySummary}
+            onChange={handleWeeklySummaryToggle}
             last
           />
         </Section>

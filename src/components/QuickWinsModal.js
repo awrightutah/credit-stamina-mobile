@@ -18,20 +18,20 @@ const COLORS = {
   primary: '#1E40AF',
   secondary: '#059669',
   growthGreen: '#059669',
-  alertAmber: '#D97706',
+  alertAmber: '#EA580C',
   errorRed: '#DC2626',
-  background: '#0f172a',
-  card: '#111827',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  background: '#0F172A',
+  card: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   danger: '#DC2626',
-  warning: '#D97706',
+  warning: '#EA580C',
   success: '#059669',
   purple: '#7C3AED',
 };
 
-const QuickWinsModal = ({ visible, onClose }) => {
+const QuickWinsModal = ({ visible, onClose, onComplete }) => {
   const [loading, setLoading] = useState(true);
   const [steps, setSteps] = useState([]);
   const [error, setError] = useState(null);
@@ -56,11 +56,19 @@ const QuickWinsModal = ({ visible, onClose }) => {
     }
   };
 
-  const handleMarkDone = async (stepId) => {
-    try {
-      await aiAPI.completeAction(stepId);
-      setSteps(steps.filter(s => s.id !== stepId));
+  const handleMarkDone = async (step, index) => {
+    // If the step has no id, just remove it locally — no API call needed
+    if (!step.id) {
+      setSteps(prev => prev.filter((_, i) => i !== index));
       Alert.alert('✅ Completed!', 'Great job! Keep up the momentum!');
+      onComplete?.();
+      return;
+    }
+    try {
+      await aiAPI.completeAction(step.id);
+      setSteps(steps.filter(s => s.id !== step.id));
+      Alert.alert('✅ Completed!', 'Great job! Keep up the momentum!');
+      onComplete?.(); // refresh dashboard stats
     } catch (err) {
       console.error('Error completing action:', err);
       Alert.alert('Error', 'Failed to mark as done');
@@ -158,7 +166,7 @@ const QuickWinsModal = ({ visible, onClose }) => {
 
                     <TouchableOpacity
                       style={styles.doneButton}
-                      onPress={() => handleMarkDone(step.id)}
+                      onPress={() => handleMarkDone(step, index)}
                     >
                       <Text style={styles.doneButtonText}>Mark Done</Text>
                     </TouchableOpacity>

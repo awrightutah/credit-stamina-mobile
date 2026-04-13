@@ -11,6 +11,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import navigationRef from './src/navigation/navigationRef';
+import useNetworkStatus from './src/hooks/useNetworkStatus';
+import OfflineBanner from './src/components/OfflineBanner';
 
 function AppContent() {
   const { loading, isAuthenticated } = useAuth();
@@ -25,14 +28,15 @@ function AppContent() {
   }
 
   return (
-    <NavigationContainer>
+    // ref wired here so push-notification deep links work from anywhere in the app
+    <NavigationContainer ref={navigationRef}>
       <AppNavigator />
     </NavigationContainer>
   );
 }
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+  const { isOnline } = useNetworkStatus();
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -41,6 +45,7 @@ function App() {
         <AuthProvider>
           <AppContent />
         </AuthProvider>
+        <OfflineBanner visible={!isOnline} />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -73,3 +73,9 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# App environment config (contains credentials — never commit)
+src/config/env.js
+src/config/googlePlacesKey.js
+.env
+.env.local

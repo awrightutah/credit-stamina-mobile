@@ -10,10 +10,10 @@ import {
 import { placesAPI } from '../services/api';
 
 const COLORS = {
-  card: '#111827',
-  surface: '#1e293b',
-  text: '#FFFFFF',
-  textSecondary: '#6B7280',
+  card: '#1E293B',
+  surface: '#1E293B',
+  text: '#F1F5F9',
+  textSecondary: '#64748B',
   border: '#374151',
   purple: '#7C3AED',
 };

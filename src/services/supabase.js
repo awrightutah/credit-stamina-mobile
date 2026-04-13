@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
 
-// Your Supabase configuration
-const supabaseUrl = 'https://YOUR_SUPABASE_PROJECT_URL';
-const supabaseAnonKey = 'SUPABASE_ANON_KEY_REMOVED_FROM_HISTORY';
+const supabaseUrl  = SUPABASE_URL;
+const supabaseAnonKey = SUPABASE_ANON_KEY;
 
 // Create Supabase client with AsyncStorage for React Native
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -14,6 +14,48 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+// ── Session helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Returns true for any error that means the stored refresh token is gone or
+ * invalid.  These should be handled silently (redirect to login) rather than
+ * surfaced as an error to the user.
+ */
+export const isRefreshTokenError = (e) => {
+  if (!e) return false;
+  const msg = (e?.message ?? '').toLowerCase();
+  return (
+    e?.name === 'AuthApiError' ||
+    msg.includes('refresh token not found') ||
+    msg.includes('invalid refresh token') ||
+    msg.includes('token has expired') ||
+    msg.includes('token is expired') ||
+    e?.status === 400 ||
+    e?.__isAuthError === true
+  );
+};
+
+/**
+ * Wipes all Supabase-related keys from AsyncStorage and signs the client out
+ * locally.  Call this whenever you detect a stale / invalid refresh token.
+ */
+export const clearStoredSession = async () => {
+  try {
+    // Local sign-out — does NOT hit the network, just clears in-memory state
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => null);
+    // Sweep AsyncStorage for any leftover Supabase keys
+    const allKeys = await AsyncStorage.getAllKeys().catch(() => []);
+    const supabaseKeys = allKeys.filter(
+      (k) => k.startsWith('sb-') || k.toLowerCase().includes('supabase')
+    );
+    if (supabaseKeys.length) {
+      await AsyncStorage.multiRemove(supabaseKeys).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('[Auth] clearStoredSession error:', e?.message);
+  }
+};
 
 // Auth helper functions
 // profileData: { fullName, phone, address: { street, city, state, zip } }
