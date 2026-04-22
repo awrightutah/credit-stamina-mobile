@@ -1074,6 +1074,54 @@ app.delete('/api/user/delete-account', async (req, res) => {
   }
 });
 
+// ============================================
+// GOOGLE PLACES PROXY (address autocomplete)
+// Requires GOOGLE_PLACES_API_KEY env var in Railway.
+// Mobile app calls these routes — never exposes the key to the client.
+// ============================================
+
+app.get('/api/places/autocomplete', async (req, res) => {
+  const { input } = req.query;
+  if (!input || input.length < 2) return res.json({ predictions: [] });
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) {
+    console.warn('[Places] GOOGLE_PLACES_API_KEY not set — autocomplete disabled');
+    return res.json({ predictions: [] });
+  }
+  try {
+    const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
+    url.searchParams.set('input', input);
+    url.searchParams.set('types', 'address');
+    url.searchParams.set('components', 'country:us');
+    url.searchParams.set('key', key);
+    const r = await fetch(url.toString());
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    console.error('[Places] autocomplete error:', e.message);
+    res.json({ predictions: [] });
+  }
+});
+
+app.get('/api/places/details', async (req, res) => {
+  const { place_id } = req.query;
+  if (!place_id) return res.json({ result: {} });
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) return res.json({ result: {} });
+  try {
+    const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+    url.searchParams.set('place_id', place_id);
+    url.searchParams.set('fields', 'address_components');
+    url.searchParams.set('key', key);
+    const r = await fetch(url.toString());
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    console.error('[Places] details error:', e.message);
+    res.json({ result: {} });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 

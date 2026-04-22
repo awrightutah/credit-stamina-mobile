@@ -34,6 +34,7 @@ Go to your Railway project → **Variables** and add:
 | `SUPABASE_URL` | Your Supabase project URL | Supabase Dashboard → Settings → API |
 | `SUPABASE_ANON_KEY` | Supabase anonymous key | Supabase Dashboard → Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Required for in-app account deletion.** Grants admin-level access — never expose client-side. | Supabase Dashboard → Settings → API → `service_role` key |
+| `GOOGLE_PLACES_API_KEY` | **Required for address autocomplete** in the registration screen. The backend proxies `/api/places/autocomplete` and `/api/places/details` — the key never reaches the mobile app. Enable "Places API" in Google Cloud Console and restrict the key to your Railway service. | Google Cloud Console → APIs & Services → Credentials |
 | `PORT` | Railway sets this automatically — do not override |  |
 
 #### Why `SUPABASE_SERVICE_ROLE_KEY` is required
