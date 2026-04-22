@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { aiAPI, accountsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import AIDisclaimer from '../components/AIDisclaimer';
+import AIDisclaimerBanner from '../components/AIDisclaimerBanner';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -279,6 +281,7 @@ const ActionPlanScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <AIDisclaimerBanner />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -332,11 +335,7 @@ const ActionPlanScreen = () => {
         )}
 
         {/* Disclaimer */}
-        <View style={styles.disclaimer}>
-          <Text style={styles.disclaimerText}>
-            AI-generated plan. Verify before acting. Not legal/financial advice.
-          </Text>
-        </View>
+        <AIDisclaimer style={styles.disclaimerOverride} />
       </ScrollView>
     </SafeAreaView>
   );

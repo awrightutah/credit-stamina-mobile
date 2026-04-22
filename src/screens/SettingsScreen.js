@@ -12,7 +12,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { smsAPI, authAPI } from '../services/api';
+import { smsAPI, authAPI, notificationsAPI } from '../services/api';
+import { useESignConsent } from '../hooks/useESignConsent';
+import { useAIDisclaimer } from '../hooks/useAIDisclaimer';
+// Lazy-load push helpers so a missing native module never crashes this screen
+const getPushHelpers = () => {
+  try {
+    const mod = require('../services/notifications');
+    return {
+      checkNotificationPermissions: mod.checkNotificationPermissions  ?? (async () => ({ alert: false })),
+      registerForPushNotifications:  mod.registerForPushNotifications  ?? (async () => null),
+      unregisterPushNotifications:   mod.unregisterPushNotifications   ?? (async () => {}),
+    };
+  } catch {
+    return {
+      checkNotificationPermissions: async () => ({ alert: false }),
+      registerForPushNotifications: async () => null,
+      unregisterPushNotifications:  async () => {},
+    };
+  }
+};
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -73,6 +92,8 @@ const Section = ({ title, children }) => (
 const SettingsScreen = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { hasConsented, consentDate, withdrawConsent } = useESignConsent();
+  const { hasAcknowledged, acknowledgedAt } = useAIDisclaimer();
 
   // Notification toggles
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -84,8 +105,14 @@ const SettingsScreen = () => {
   const [scoreUpdates, setScoreUpdates] = useState(true);
   const [weeklySummary, setWeeklySummary] = useState(true);
 
-  // Load saved SMS preferences from backend on mount
+  // Load saved preferences and actual iOS push permission on mount
   useEffect(() => {
+    // Check real iOS permission state — don't assume true
+    const { checkNotificationPermissions } = getPushHelpers();
+    checkNotificationPermissions().then(({ alert }) => {
+      setPushNotifications(!!alert);
+    }).catch(() => null);
+
     smsAPI.getPreferences().then(res => {
       const prefs = res?.data?.preferences ?? res?.data ?? {};
       if (typeof prefs.sms_enabled === 'boolean') setSmsNotifications(prefs.sms_enabled);
@@ -93,7 +120,7 @@ const SettingsScreen = () => {
       if (typeof prefs.action_reminders === 'boolean') setActionReminders(prefs.action_reminders);
       if (typeof prefs.score_updates === 'boolean') setScoreUpdates(prefs.score_updates);
       if (typeof prefs.weekly_summary === 'boolean') setWeeklySummary(prefs.weekly_summary);
-    }).catch(() => null); // silent — defaults are fine
+    }).catch(() => null);
   }, []);
 
   const savePreferences = (patch) => {
@@ -106,6 +133,32 @@ const SettingsScreen = () => {
       ...patch,
     };
     smsAPI.updatePreferences(prefs).catch(() => null);
+  };
+
+  const handlePushToggle = async (value) => {
+    if (value) {
+      const { registerForPushNotifications } = getPushHelpers();
+      const token = await registerForPushNotifications().catch(() => null);
+      if (token) {
+        setPushNotifications(true);
+        notificationsAPI.updatePreferences({ push_enabled: true }).catch(() => null);
+      } else {
+        Alert.alert(
+          'Notifications Blocked',
+          'To receive Credit Stamina alerts, go to Settings → Credit Stamina → Notifications and enable them.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openURL('app-settings:') },
+          ]
+        );
+        setPushNotifications(false);
+      }
+    } else {
+      setPushNotifications(false);
+      const { unregisterPushNotifications } = getPushHelpers();
+      unregisterPushNotifications().catch(() => null);
+      notificationsAPI.updatePreferences({ push_enabled: false }).catch(() => null);
+    }
   };
 
   const handleSmsToggle = async (value) => {
@@ -197,6 +250,35 @@ const SettingsScreen = () => {
     );
   };
 
+  const handleWithdrawConsent = () => {
+    Alert.alert(
+      'Withdraw eSign Consent',
+      'You will no longer be able to electronically sign dispute letters. You can re-consent at any time before signing a letter.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw Consent',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await withdrawConsent();
+              Alert.alert('Consent Withdrawn', 'Your eSign consent has been removed.');
+            } catch {
+              Alert.alert('Error', 'Could not withdraw consent. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const formatShortDate = (dateStr) => {
+    if (!dateStr) return null;
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return null; }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -216,7 +298,7 @@ const SettingsScreen = () => {
             title="Push Notifications"
             subtitle="Credit alerts and action reminders"
             value={pushNotifications}
-            onChange={setPushNotifications}
+            onChange={handlePushToggle}
           />
           <ToggleRow
             title="Email Notifications"
@@ -283,15 +365,6 @@ const SettingsScreen = () => {
             subtitle="support@creditstamina.com"
             onPress={() => openURL('mailto:support@creditstamina.com')}
           />
-          <LinkRow
-            title="Privacy Policy"
-            onPress={() => openURL('https://creditstamina.com/privacy')}
-          />
-          <LinkRow
-            title="Terms of Service"
-            onPress={() => openURL('https://creditstamina.com/terms')}
-            last
-          />
         </Section>
 
         {/* About */}
@@ -304,6 +377,82 @@ const SettingsScreen = () => {
             <Text style={styles.rowTitle}>Build</Text>
             <Text style={styles.rowValue}>React Native 0.85</Text>
           </View>
+        </Section>
+
+        {/* Privacy & Legal */}
+        <Section title="PRIVACY & LEGAL">
+          {/* eSign Consent Status */}
+          <View style={[styles.row, styles.rowBorder]}>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>Electronic Signature Consent</Text>
+              <Text style={styles.rowSubtitle}>
+                {hasConsented
+                  ? `Consented${consentDate ? ` on ${formatShortDate(consentDate)}` : ''}`
+                  : 'Not yet consented'}
+              </Text>
+            </View>
+            <View style={[
+              styles.consentBadge,
+              { backgroundColor: hasConsented ? COLORS.success + '20' : COLORS.border + '80' },
+            ]}>
+              <Text style={[
+                styles.consentBadgeText,
+                { color: hasConsented ? COLORS.success : COLORS.textSecondary },
+              ]}>
+                {hasConsented ? 'Active' : 'None'}
+              </Text>
+            </View>
+          </View>
+
+          {hasConsented && (
+            <LinkRow
+              title="Withdraw eSign Consent"
+              subtitle="Revoke permission to use electronic signatures"
+              onPress={handleWithdrawConsent}
+              danger
+            />
+          )}
+
+          <LinkRow
+            title="View eSign Disclosure"
+            subtitle="ESIGN Act & UETA legal disclosure"
+            onPress={() => openURL('https://creditstamina.com/esign-disclosure')}
+          />
+
+          {/* AI Disclaimer Acknowledgment */}
+          <View style={[styles.row, styles.rowBorder]}>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>AI Content Acknowledgment</Text>
+              <Text style={styles.rowSubtitle}>
+                {hasAcknowledged && acknowledgedAt
+                  ? `Acknowledged on ${formatShortDate(acknowledgedAt)}`
+                  : hasAcknowledged
+                  ? 'Acknowledged'
+                  : 'Not yet acknowledged'}
+              </Text>
+            </View>
+            <View style={[
+              styles.consentBadge,
+              { backgroundColor: hasAcknowledged ? COLORS.success + '20' : COLORS.border + '80' },
+            ]}>
+              <Text style={[
+                styles.consentBadgeText,
+                { color: hasAcknowledged ? COLORS.success : COLORS.textSecondary },
+              ]}>
+                {hasAcknowledged ? 'Done' : 'Pending'}
+              </Text>
+            </View>
+          </View>
+
+          <LinkRow
+            title="Privacy Policy"
+            onPress={() => openURL('https://creditstamina.com/privacy')}
+          />
+          <LinkRow
+            title="Terms of Service"
+            onPress={() => openURL('https://creditstamina.com/terms')}
+            last
+          />
         </Section>
 
         {/* Danger Zone */}
@@ -419,6 +568,15 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 12,
     marginTop: 8,
+  },
+  consentBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  consentBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

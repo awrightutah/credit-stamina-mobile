@@ -599,8 +599,14 @@ export const adminAPI = {
     return data;
   },
 
-  // Get recent activity across all users
+  // Get recent activity across all users (uses SECURITY DEFINER RPC to bypass RLS)
   getRecentActivity: async (limit = 50) => {
+    // Try RPC first — bypasses RLS on activity_log
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('admin_get_activity', { p_limit: limit });
+    if (!rpcError && Array.isArray(rpcData)) return rpcData;
+    if (rpcError) console.warn('[Admin] admin_get_activity RPC failed:', rpcError.code, rpcError.message);
+    // Fallback: direct query (works if admin has permissive RLS or no RLS on activity_log)
     const { data, error } = await supabase
       .from('activity_log')
       .select('*')
@@ -1058,6 +1064,139 @@ export const notificationsAPI = {
 
   updatePreferences: async (prefs) => {
     return api.put('/api/notifications/preferences', prefs);
+  },
+};
+
+// ============================================
+// LEGAL / COMPLIANCE  (Supabase-direct)
+//
+// Required Supabase migrations — run once in the SQL editor:
+//
+// CREATE TABLE IF NOT EXISTS ai_disclaimer_acknowledgments (
+//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+//   acknowledged_at timestamptz NOT NULL DEFAULT now(),
+//   version text NOT NULL DEFAULT '1.0'
+// );
+// ALTER TABLE ai_disclaimer_acknowledgments ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "own disclaimer ack" ON ai_disclaimer_acknowledgments
+//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+//
+// CREATE TABLE IF NOT EXISTS esign_consents (
+//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+//   consented_at timestamptz NOT NULL DEFAULT now(),
+//   withdrawn_at timestamptz,
+//   consent_text_version text NOT NULL DEFAULT '1.0'
+// );
+// ALTER TABLE esign_consents ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "own esign consents" ON esign_consents
+//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+//
+// CREATE TABLE IF NOT EXISTS signed_documents (
+//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+//   letter_id uuid,
+//   signer_name text NOT NULL,
+//   signed_at timestamptz NOT NULL DEFAULT now(),
+//   esign_consent_id uuid REFERENCES esign_consents(id),
+//   signature_svg text,
+//   is_active boolean NOT NULL DEFAULT true
+// );
+// ALTER TABLE signed_documents ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "own signed docs" ON signed_documents
+//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+// ============================================
+
+export const legalAPI = {
+  // ─── AI Disclaimer ────────────────────────────────────────────────────────────
+  getDisclaimerAck: async (userId) => {
+    const { data, error } = await supabase
+      .from('ai_disclaimer_acknowledgments')
+      .select('user_id, acknowledged_at, version')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
+  },
+
+  acknowledgeDisclaimer: async (userId, version = '1.0') => {
+    const { data, error } = await supabase
+      .from('ai_disclaimer_acknowledgments')
+      .upsert(
+        { user_id: userId, acknowledged_at: new Date().toISOString(), version },
+        { onConflict: 'user_id' }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // ─── eSign Consent ────────────────────────────────────────────────────────────
+  getESignConsent: async (userId) => {
+    const { data, error } = await supabase
+      .from('esign_consents')
+      .select('*')
+      .eq('user_id', userId)
+      .is('withdrawn_at', null)
+      .order('consented_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
+  },
+
+  recordESignConsent: async (userId, version = '1.0') => {
+    const { data, error } = await supabase
+      .from('esign_consents')
+      .insert({
+        user_id: userId,
+        consented_at: new Date().toISOString(),
+        consent_text_version: version,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  withdrawESignConsent: async (userId) => {
+    const { error } = await supabase
+      .from('esign_consents')
+      .update({ withdrawn_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .is('withdrawn_at', null);
+    if (error) throw error;
+  },
+
+  // ─── Signed Documents ─────────────────────────────────────────────────────────
+  saveSignedDocument: async ({ userId, letterId, signerName, signedAt, esignConsentId, signatureSvg }) => {
+    const { data, error } = await supabase
+      .from('signed_documents')
+      .insert({
+        user_id: userId,
+        letter_id: letterId ?? null,
+        signer_name: signerName,
+        signed_at: signedAt ?? new Date().toISOString(),
+        esign_consent_id: esignConsentId ?? null,
+        signature_svg: signatureSvg ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  getSignedDocuments: async (userId) => {
+    const { data, error } = await supabase
+      .from('signed_documents')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('signed_at', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
   },
 };
 

@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, accountsAPI, scoresAPI } from '../services/api';
+import AIDisclaimer from '../components/AIDisclaimer';
+import AIDisclaimerBanner from '../components/AIDisclaimerBanner';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -153,6 +155,7 @@ const ScoreSimulatorScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <AIDisclaimerBanner />
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -307,6 +310,7 @@ const ScoreSimulatorScreen = ({ navigation }) => {
               ))}
             </View>
           )}
+          <AIDisclaimer />
         </View>
       )}
 

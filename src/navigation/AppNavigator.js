@@ -38,6 +38,11 @@ import FamilyScreen from '../screens/FamilyScreen';
 import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
 import AdminScreen from '../screens/AdminScreen';
 
+// Legal / eSign screens
+import ESignConsentScreen from '../screens/ESignConsentScreen';
+import SignatureScreen from '../screens/SignatureScreen';
+import SignedDocumentScreen from '../screens/SignedDocumentScreen';
+
 const COLORS = {
   primary: '#1E40AF',
   purple: '#7C3AED',
@@ -129,10 +134,18 @@ const AppNavigator = () => {
     if (!isAuthenticated) return;
     const cleanup = setupNotificationHandlers({
       onOpen: (notification) => {
-        const { screen, letterId } = notification?.data ?? {};
+        const { screen, letterId, bureau } = notification?.data ?? {};
         if (!screen) return;
         try {
-          if (screen === 'Letters') navigateTo('Letters', letterId ? { openLetterId: letterId } : undefined);
+          if (screen === 'Letters') {
+            navigateTo('Letters', letterId ? { openLetterId: letterId } : undefined);
+          } else if (screen === 'Score') {
+            navigateTo('MainTabs', { screen: 'Score', params: bureau ? { bureau } : undefined });
+          } else if (screen === 'Actions') {
+            navigateTo('MainTabs', { screen: 'Actions' });
+          } else if (screen === 'Budget') {
+            navigateTo('Budget');
+          }
         } catch (e) {
           console.warn('[AppNavigator] notification nav error:', e?.message);
         }
@@ -161,6 +174,9 @@ const AppNavigator = () => {
         <Stack.Screen name="Family" component={FamilyScreen} />
         <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
         <Stack.Screen name="Admin" component={AdminScreen} />
+        <Stack.Screen name="ESignConsent" component={ESignConsentScreen} />
+        <Stack.Screen name="Signature" component={SignatureScreen} />
+        <Stack.Screen name="SignedDocument" component={SignedDocumentScreen} />
       </Stack.Navigator>
     );
   }

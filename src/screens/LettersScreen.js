@@ -14,10 +14,12 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { lettersAPI, accountsAPI, logActivity, pointsAPI } from '../services/api';
 import { scheduleLetterReminder, cancelLetterReminder } from '../services/notifications';
 import PaymentModal from '../components/PaymentModal';
 import { useAuth } from '../context/AuthContext';
+import { useESignConsent } from '../hooks/useESignConsent';
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -351,7 +353,8 @@ const GenerateModal = ({ visible, onClose, onGenerate, accounts = [] }) => {
 
 // ─── Detail Modal ──────────────────────────────────────────────────────────────
 const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
-  const [signatureName, setSignatureName]   = useState('');
+  const navigation = useNavigation();
+  const { hasConsented, loading: consentLoading } = useESignConsent();
   const [signingLoading, setSigningLoading] = useState(false);
   const [mailLoading, setMailLoading]       = useState(false);
   const [pdfLoading, setPdfLoading]         = useState(false);
@@ -381,7 +384,6 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
 
   useEffect(() => {
     setCurrentLetter(letter);
-    setSignatureName('');
     setShowMailForm(false);
     setOutcome(letter?.outcome || null);
     setDenialReason(letter?.denial_reason || '');
@@ -415,22 +417,19 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
   const isSigned = !!(currentLetter?.signature_name || currentLetter?.signed_at);
   const isSent   = ['sent', 'mailed', 'delivered'].includes((currentLetter?.status || '').toLowerCase());
 
-  const handleSign = async () => {
-    const name = signatureName.trim();
-    if (!name) {
-      Alert.alert('Signature Required', 'Please type your full legal name to sign this letter.');
-      return;
-    }
-    setSigningLoading(true);
-    try {
-      await lettersAPI.sign(currentLetter.id, name);
-      setCurrentLetter(prev => ({ ...prev, signature_name: name, signed_at: new Date().toISOString() }));
-      onLetterUpdated?.();
-      Alert.alert('Signed', `Letter signed as "${name}".`);
-    } catch {
-      Alert.alert('Error', 'Failed to save signature. Please try again.');
-    } finally {
-      setSigningLoading(false);
+  const handleOpenSignFlow = () => {
+    const letterData = {
+      letterId:   currentLetter.id,
+      letterType: getLetterTypeLabel(currentLetter.letter_type),
+      creditor:   currentLetter.account_name || currentLetter.creditor_name || currentLetter.creditor || 'Unknown',
+      bureau:     currentLetter.bureau,
+    };
+    // Close modal first so navigation works cleanly from behind the Modal
+    onClose();
+    if (hasConsented) {
+      navigation.navigate('Signature', { letterData });
+    } else {
+      navigation.navigate('ESignConsent', { letterData });
     }
   };
 
@@ -656,25 +655,17 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
               ) : (
                 <>
                   <Text style={styles.signatureHint}>
-                    Type your full legal name to sign this letter. Your typed name constitutes your legal signature.
+                    Sign this letter with your finger. Your drawn signature is legally binding under the ESIGN Act and UETA.
                   </Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={signatureName}
-                    onChangeText={setSignatureName}
-                    placeholder="Full legal name"
-                    placeholderTextColor={COLORS.textSecondary}
-                    autoCapitalize="words"
-                  />
                   <TouchableOpacity
-                    style={[styles.signBtn, signingLoading && { opacity: 0.7 }]}
-                    onPress={handleSign}
-                    disabled={signingLoading}
+                    style={[styles.signBtn, consentLoading && { opacity: 0.6 }]}
+                    onPress={handleOpenSignFlow}
+                    disabled={consentLoading}
+                    activeOpacity={0.85}
                   >
-                    {signingLoading
-                      ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={styles.signBtnText}>Sign Letter</Text>
-                    }
+                    <Text style={styles.signBtnText}>
+                      {consentLoading ? 'Loading…' : '✍  Sign Letter'}
+                    </Text>
                   </TouchableOpacity>
                 </>
               )}

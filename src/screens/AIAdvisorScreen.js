@@ -16,6 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Markdown from 'react-native-markdown-display';
 import { aiAPI, accountsAPI, scoresAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import AIDisclaimer from '../components/AIDisclaimer';
+import AIDisclaimerBanner from '../components/AIDisclaimerBanner';
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -233,7 +235,10 @@ const AIAdvisorScreen = () => {
           {isUser ? (
             <Text style={styles.userText}>{message.content}</Text>
           ) : (
-            <Markdown style={markdownStyles}>{message.content}</Markdown>
+            <>
+              <Markdown style={markdownStyles}>{message.content}</Markdown>
+              {message.id !== 'welcome' && <AIDisclaimer />}
+            </>
           )}
         </View>
         <Text style={styles.messageTime}>
@@ -273,6 +278,7 @@ const AIAdvisorScreen = () => {
       </View>
 
       {contextBadge()}
+      <AIDisclaimerBanner />
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
