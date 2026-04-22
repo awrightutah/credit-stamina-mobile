@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { aiAPI } from '../services/api';
+import { aiAPI, aiCacheAPI } from '../services/api';
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -42,12 +42,30 @@ const QuickWinsModal = ({ visible, onClose, onComplete }) => {
     }
   }, [visible]);
 
-  const fetchQuickWins = async () => {
+  const fetchQuickWins = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Check cache first unless forcing a refresh
+      if (!forceRefresh) {
+        const cached = await aiCacheAPI.get('quick_wins').catch(() => null);
+        if (cached) {
+          const parsed = aiCacheAPI.parse(cached);
+          const cachedSteps = parsed?.steps || parsed || [];
+          if (Array.isArray(cachedSteps) && cachedSteps.length > 0) {
+            setSteps(cachedSteps);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       const response = await aiAPI.getQuickWins();
-      setSteps(response.data?.steps || response.data || []);
+      const freshSteps = response.data?.steps || response.data || [];
+      setSteps(freshSteps);
+      // Save to cache
+      aiCacheAPI.set('quick_wins', { steps: freshSteps }, null).catch(() => null);
     } catch (err) {
       console.error('Error fetching quick wins:', err);
       setError('Failed to load quick wins');
@@ -109,7 +127,7 @@ const QuickWinsModal = ({ visible, onClose, onComplete }) => {
           <View style={styles.disclaimer}>
             <Text style={styles.disclaimerIcon}>⚡</Text>
             <Text style={styles.disclaimerText}>
-              Quick wins based on your accounts — refreshes each time you open
+              Quick wins based on your credit report — cached to reduce AI costs
             </Text>
           </View>
           <Text style={styles.aiDisclaimer}>

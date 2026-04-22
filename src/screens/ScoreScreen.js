@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, G, Line, Circle } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
-import { scoresAPI, aiAPI, pointsAPI } from '../services/api';
+import { scoresAPI, aiAPI, aiCacheAPI, pointsAPI } from '../services/api';
 import COLORS from '../theme/colors';
 
 const { width } = Dimensions.get('window');
@@ -340,14 +340,31 @@ const ScoreScreen = ({ route }) => {
     }
   };
 
-  const fetchAiTips = async (currentScore, targetTier, pointsNeeded) => {
+  const fetchAiTips = async (currentScore, targetTier, pointsNeeded, forceRefresh = false) => {
     try {
       setTipsLoading(true);
+
+      // Check cache first unless explicitly refreshing
+      if (!forceRefresh) {
+        const cached = await aiCacheAPI.get('score_tips').catch(() => null);
+        if (cached) {
+          const parsed = extractTips(aiCacheAPI.parse(cached));
+          if (parsed && parsed.length > 0) {
+            setAiTips(parsed);
+            setTipsLoading(false);
+            return;
+          }
+        }
+      }
+
       const res = await aiAPI.getScoreTips(currentScore, targetTier, pointsNeeded);
       const raw = res?.data || res;
 
       const parsed = extractTips(raw);
-      if (parsed && parsed.length > 0) setAiTips(parsed);
+      if (parsed && parsed.length > 0) {
+        setAiTips(parsed);
+        aiCacheAPI.set('score_tips', raw, null).catch(() => null);
+      }
     } catch (e) {
       console.error('[ScoreScreen] tips error:', e?.response?.data || e.message);
     } finally {
@@ -663,7 +680,35 @@ const ScoreScreen = ({ route }) => {
 
             {/* AI Score Tips */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🤖 AI Score Tips</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>🤖 AI Score Tips</Text>
+                {aiTips && aiTips.length > 0 && !tipsLoading && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        'Refresh Score Tips',
+                        'Refreshing tips will use AI credits. Are you sure?',
+                        [
+                          { text: 'No', style: 'cancel' },
+                          {
+                            text: 'Yes',
+                            onPress: () => {
+                              if (scores.length > 0) {
+                                const latest = scores[0];
+                                const next = getNextTier(latest.score);
+                                fetchAiTips(latest.score, next?.label || 'Exceptional', next?.pts || 0, true);
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.refreshTipsBtn}>↺ Refresh</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               {tipsLoading ? (
                 <View style={styles.tipsLoading}>
                   <Text style={styles.tipsLoadingText}>Generating personalized tips...</Text>
@@ -999,6 +1044,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // AI tips
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  refreshTipsBtn: { fontSize: 12, color: COLORS.powerPurple, fontWeight: '600' },
   tipsLoading: { paddingVertical: 8 },
   tipsLoadingText: { color: COLORS.textSecondary, fontSize: 13, fontStyle: 'italic' },
   tipRow: { flexDirection: 'row', marginBottom: 10 },

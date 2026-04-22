@@ -1200,4 +1200,176 @@ export const legalAPI = {
   },
 };
 
+// ============================================
+// AI CACHE (Supabase-direct)
+// Stores AI-generated content so screens read from cache instead of calling Claude
+// on every load. Content is keyed by user_id + cache_type.
+//
+// SQL migration (run once in Supabase SQL editor):
+// ============================================
+// CREATE TABLE ai_cache (
+//   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+//   user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+//   cache_type      TEXT NOT NULL,  -- 'action_queue' | 'quick_wins' | 'score_tips' | 'score_prediction'
+//   content         TEXT,           -- JSON-serialised AI response
+//   generated_at    TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+//   report_upload_id UUID,          -- which report triggered this analysis (nullable)
+//   UNIQUE(user_id, cache_type)
+// );
+// ALTER TABLE ai_cache ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "Users manage their own AI cache" ON ai_cache
+//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+// ============================================
+
+export const aiCacheAPI = {
+  // Returns the cached row for a given type, or null if none exists.
+  get: async (cacheType) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from('ai_cache')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('cache_type', cacheType)
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
+  },
+
+  // Upserts a cache entry. content can be any JSON-serialisable value.
+  set: async (cacheType, content, reportUploadId = null) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from('ai_cache')
+      .upsert(
+        {
+          user_id:          userId,
+          cache_type:       cacheType,
+          content:          typeof content === 'string' ? content : JSON.stringify(content),
+          generated_at:     new Date().toISOString(),
+          report_upload_id: reportUploadId ?? null,
+        },
+        { onConflict: 'user_id,cache_type' }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // Helper: parse JSON content from a cache row (returns null on failure)
+  parse: (row) => {
+    if (!row?.content) return null;
+    try {
+      return typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
+    } catch {
+      return null;
+    }
+  },
+};
+
+// ============================================
+// POST-UPLOAD AI ANALYSIS
+// Called once after a successful PDF upload. Makes all AI calls in parallel and
+// stores every result in ai_cache so individual screens never need to call Claude.
+// onProgress(step: string) — optional callback for progress UI.
+// ============================================
+
+export const runPostUploadAnalysis = async (uploadId, accounts = [], scores = [], onProgress) => {
+  const progress = (msg) => { try { onProgress?.(msg); } catch {} };
+
+  progress('Analyzing your accounts…');
+
+  // Run action plan + quick wins in parallel; score tips after we have scores
+  const [planResult, quickWinsResult] = await Promise.allSettled([
+    (async () => {
+      progress('Building your personalized action plan…');
+      const res = await api.post('/api/action-plan', { accounts }, { timeout: 120000 });
+      await aiCacheAPI.set('action_queue', res?.data || res, uploadId);
+      return res;
+    })(),
+    (async () => {
+      progress('Finding quick wins…');
+      const res = await api.post('/api/ai-next-steps', { limit: 10 });
+      await aiCacheAPI.set('quick_wins', res?.data || res, uploadId);
+      return res;
+    })(),
+  ]);
+
+  // Score tips — use the latest score if available
+  const latestScore = scores?.[0]?.score;
+  if (latestScore) {
+    try {
+      progress('Generating score improvement tips…');
+      const tips = await api.post('/api/score-improvement-tips', {
+        current_score: latestScore,
+        target_tier:   latestScore >= 750 ? 'Exceptional' : latestScore >= 700 ? 'Very Good' : latestScore >= 650 ? 'Good' : 'Fair',
+        points_needed: Math.max(0, 750 - latestScore),
+      });
+      await aiCacheAPI.set('score_tips', tips?.data || tips, uploadId);
+    } catch (e) {
+      console.warn('[PostUpload] score tips failed (non-blocking):', e?.message);
+    }
+  }
+
+  progress('Saving results…');
+
+  // Also save the action items to the actions table
+  const planData = planResult.status === 'fulfilled' ? planResult.value?.data : null;
+  if (planData) {
+    try {
+      // Import locally to avoid circular deps — actionsAPI is defined in same file
+      const parsed = _parseAIActionsForBulkSave(planData, accounts);
+      if (parsed.length > 0) {
+        await api.delete('/api/actions/pending').catch(() => null); // clear old pending
+        await api.post('/api/actions/bulk', { actions: parsed }).catch(() => null);
+      }
+    } catch (e) {
+      console.warn('[PostUpload] action save failed (non-blocking):', e?.message);
+    }
+  }
+
+  progress('Done!');
+  return {
+    actionPlan:  planResult.status  === 'fulfilled' ? planResult.value  : null,
+    quickWins:   quickWinsResult.status === 'fulfilled' ? quickWinsResult.value : null,
+  };
+};
+
+// Internal helper used only by runPostUploadAnalysis
+const _parseAIActionsForBulkSave = (raw, accounts = []) => {
+  const base      = raw?.plan || raw?.action_plan || raw?.data || raw || {};
+  const priorityMap = { high: 1, medium: 2, low: 3 };
+  const daysOut   = (d) => new Date(Date.now() + (d || 30) * 86400000).toISOString().split('T')[0];
+  const phases    = [
+    { key: 'days_30', day: 15 }, { key: 'days_60', day: 45 }, { key: 'days_90', day: 75 },
+    { key: 'days1to30', day: 15 }, { key: 'days31to60', day: 45 }, { key: 'days61to90', day: 75 },
+  ];
+  const seen = new Set();
+  const out  = [];
+  for (const { key, day } of phases) {
+    const phase = base[key];
+    if (!phase) continue;
+    const tasks = Array.isArray(phase) ? phase : (phase.tasks || []);
+    for (const t of tasks) {
+      const title = (t.title || t.action || '').trim();
+      if (!title || seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+      out.push({
+        next_action: title,
+        title,
+        description: t.description || t.details || '',
+        category:    t.category || 'general',
+        priority:    priorityMap[t.priority?.toLowerCase()] ?? 2,
+        status:      'pending',
+        due_date:    daysOut(t.due_day || day),
+      });
+    }
+  }
+  return out;
+};
+
 export default api;

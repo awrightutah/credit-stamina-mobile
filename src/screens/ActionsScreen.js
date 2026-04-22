@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { actionsAPI, accountsAPI, aiAPI, pointsAPI } from '../services/api';
+import { actionsAPI, accountsAPI, aiAPI, aiCacheAPI, pointsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
@@ -303,6 +303,7 @@ const ActionsScreen = ({ navigation }) => {
   const [filter, setFilter]           = useState('pending');
   const [error, setError]             = useState(null);
   const [updatingId, setUpdatingId]   = useState(null);
+  const [cacheInfo, setCacheInfo]     = useState(null); // { generated_at, report_upload_id }
 
   // Ref to guard against concurrent generation calls across renders
   const generatingRef = useRef(false);
@@ -332,35 +333,42 @@ const ActionsScreen = ({ navigation }) => {
     }
   }, [cacheKey]);
 
-  // ── Initial load — Supabase first, then cache, never auto-wipe existing data ──
+  // ── Initial load — Supabase first, then cache, NEVER auto-generate ──────────
   const loadActions = useCallback(async () => {
     try {
       setError(null);
 
-      // 1. Try Supabase
+      // 1. Try Supabase for actions
       const response = await actionsAPI.getAll().catch(() => null);
       const dbData   = response?.data || [];
 
-      if (dbData.length > 0) {
-        // Real data from DB — show it and warm the cache
-        setActions(dbData);
-        saveToCache(dbData);
-        return; // done — do NOT auto-generate
+      // 2. Load ai_cache metadata (generated_at, report_upload_id) — always
+      const cacheRow = await aiCacheAPI.get('action_queue').catch(() => null);
+      if (cacheRow) {
+        setCacheInfo({
+          generated_at:     cacheRow.generated_at,
+          report_upload_id: cacheRow.report_upload_id,
+        });
       }
 
-      // 2. DB empty — try AsyncStorage cache
+      if (dbData.length > 0) {
+        setActions(dbData);
+        saveToCache(dbData);
+        return; // done — never auto-generate
+      }
+
+      // 3. DB empty — try AsyncStorage cache
       const cached = await loadFromCache();
       if (cached.length > 0) {
         setActions(cached);
-        return; // cached data shown — do NOT auto-generate
+        return; // cached data shown — never auto-generate
       }
 
-      // 3. Truly nothing saved anywhere — first-time user, generate automatically
-      generateActions(false);
+      // 4. Truly nothing — show empty state prompting upload. Do NOT auto-generate.
+      setActions([]);
 
     } catch (err) {
       console.error('[Actions] loadActions error:', err);
-      // On network error always try cache before showing error
       const cached = await loadFromCache();
       if (cached.length > 0) {
         setActions(cached);
@@ -378,6 +386,7 @@ const ActionsScreen = ({ navigation }) => {
     if (user?.id) loadActions();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pull-to-refresh only reads from Supabase — never triggers AI generation
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadActions();
@@ -439,6 +448,7 @@ const ActionsScreen = ({ navigation }) => {
 
       // 6. Persist to Supabase in the background — fire-and-forget.
       // We intentionally do NOT await getAll() after this. State is already correct.
+      const now = new Date().toISOString();
       if (isManual) {
         actionsAPI.deleteAllPending().catch(e =>
           console.warn('[Actions] deleteAllPending failed (non-blocking):', e?.message)
@@ -447,6 +457,11 @@ const ActionsScreen = ({ navigation }) => {
       actionsAPI.createBulk(allActions).catch(e =>
         console.warn('[Actions] background save failed (cache still active):', e?.message)
       );
+      // Save generation timestamp to ai_cache so header can show "Generated on..."
+      aiCacheAPI.set('action_queue', { count: allActions.length }, null).catch(e =>
+        console.warn('[Actions] aiCacheAPI.set failed (non-blocking):', e?.message)
+      );
+      setCacheInfo({ generated_at: now, report_upload_id: null });
 
     } catch (err) {
       console.error('[Actions] generation error:', err);
@@ -513,12 +528,12 @@ const ActionsScreen = ({ navigation }) => {
   // Manual regenerate — user-initiated only, never automatic
   const handleRegenerate = () => {
     Alert.alert(
-      'Refresh Action Queue',
-      'This will rebuild your action queue from your latest account data using Claude AI. Completed actions will be kept.',
+      'Regenerate Action Plan',
+      'Regenerating your action plan will use AI credits. Are you sure? This will replace your current action plan.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'No', style: 'cancel' },
         {
-          text: 'Refresh',
+          text: 'Yes',
           onPress: async () => {
             // Clear cache so stale data doesn't flash while generating
             if (cacheKey) await AsyncStorage.removeItem(cacheKey).catch(() => null);
@@ -556,11 +571,18 @@ const ActionsScreen = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1, marginRight: 12 }}>
           <Text style={styles.title}>Action Queue</Text>
-          <Text style={styles.subtitle}>
-            {pendingCount} pending · {completedCount} completed
-          </Text>
+          {actions.length > 0 ? (
+            <Text style={styles.subtitle}>
+              {pendingCount} pending · {completedCount} completed
+            </Text>
+          ) : null}
+          {cacheInfo?.generated_at ? (
+            <Text style={styles.cacheInfoText}>
+              Generated on {new Date(cacheInfo.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+          ) : null}
         </View>
         <TouchableOpacity
           style={styles.regenBtn}
@@ -568,7 +590,7 @@ const ActionsScreen = ({ navigation }) => {
           disabled={generating}
           activeOpacity={0.7}
         >
-          <Text style={styles.regenBtnText}>↺ Refresh</Text>
+          <Text style={styles.regenBtnText}>↺ Regenerate</Text>
         </TouchableOpacity>
       </View>
 
@@ -638,16 +660,26 @@ const ActionsScreen = ({ navigation }) => {
                 </TouchableOpacity>
               </>
             ) : filter === 'pending' ? (
-              <>
-                <Text style={styles.emptyIcon}>🎉</Text>
-                <Text style={styles.emptyTitle}>All Caught Up!</Text>
-                <Text style={styles.emptySubtext}>
-                  No pending actions. Tap Refresh to build a new queue from your latest accounts.
-                </Text>
-                <TouchableOpacity style={styles.uploadBtn} onPress={() => generateActions(true)}>
-                  <Text style={styles.uploadBtnText}>Generate Actions</Text>
-                </TouchableOpacity>
-              </>
+              actions.length === 0 ? (
+                <>
+                  <Text style={styles.emptyIcon}>📄</Text>
+                  <Text style={styles.emptyTitle}>No Action Plan Yet</Text>
+                  <Text style={styles.emptySubtext}>
+                    Upload your credit report to generate your personalized action plan.
+                  </Text>
+                  <TouchableOpacity style={styles.uploadBtn} onPress={() => navigation.navigate('Upload')}>
+                    <Text style={styles.uploadBtnText}>Upload Credit Report</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.emptyIcon}>🎉</Text>
+                  <Text style={styles.emptyTitle}>All Caught Up!</Text>
+                  <Text style={styles.emptySubtext}>
+                    No pending actions. Use Regenerate to rebuild your queue from your latest accounts.
+                  </Text>
+                </>
+              )
             ) : (
               <>
                 <Text style={styles.emptyIcon}>📋</Text>
@@ -732,6 +764,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  cacheInfoText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   regenBtn: {
     backgroundColor: COLORS.surface,

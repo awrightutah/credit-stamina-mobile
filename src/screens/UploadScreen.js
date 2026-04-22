@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DocumentPicker from 'react-native-document-picker';
-import { creditReportsAPI, pointsAPI } from '../services/api';
+import { creditReportsAPI, pointsAPI, runPostUploadAnalysis } from '../services/api';
 import { scheduleLocalNotification } from '../services/notifications';
 
 const COLORS = {
@@ -135,6 +135,7 @@ const UploadScreen = ({ navigation }) => {
   const [result, setResult]                 = useState(null);
   const [error, setError]                   = useState(null);
   const [isParseError, setIsParseError]     = useState(false);
+  const [analysisStep, setAnalysisStep]     = useState(''); // post-upload AI analysis progress
 
   const [reports, setReports]               = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -311,18 +312,29 @@ const UploadScreen = ({ navigation }) => {
       setParsing(false);
 
       if (response.data) {
+        const uploadId  = response.data.id || response.data.report_id || null;
+        const accounts  = response.data.accounts || [];
+        const scores    = response.data.scores   || [];
+
         setResult({
           success: true,
-          accountsFound: response.data.accounts?.length || 0,
+          accountsFound: accounts.length,
           bureau: response.data.bureau,
-          accounts: response.data.accounts || [],
+          accounts,
         });
         pointsAPI.award('upload_report', 'Uploaded credit report', 50).catch(() => null);
         loadHistory();
+
+        // Kick off one comprehensive AI analysis — action queue + quick wins + score tips
+        // Runs in the background; progress shown via setAnalysisStep
+        runPostUploadAnalysis(uploadId, accounts, scores, (step) => setAnalysisStep(step))
+          .catch((e) => console.warn('[Upload] post-upload analysis error:', e?.message))
+          .finally(() => setAnalysisStep(''));
+
         setTimeout(() => {
           Alert.alert(
             'Upload Complete!',
-            `Found ${response.data.accounts?.length || 0} accounts. View them now?`,
+            `Found ${accounts.length} accounts. Your AI action plan is being prepared in the background.`,
             [
               { text: 'Stay Here', style: 'cancel' },
               { text: 'View Accounts', onPress: () => navigation.navigate('Accounts') },
@@ -570,6 +582,14 @@ const UploadScreen = ({ navigation }) => {
             ) : (
               <Text style={styles.errorBody}>{error}</Text>
             )}
+          </View>
+        )}
+
+        {/* ── Background AI analysis progress banner ── */}
+        {!!analysisStep && (
+          <View style={styles.analysisBanner}>
+            <ActivityIndicator size="small" color={COLORS.purple} style={{ marginRight: 8 }} />
+            <Text style={styles.analysisStepText}>{analysisStep}</Text>
           </View>
         )}
 
@@ -921,6 +941,17 @@ const styles = StyleSheet.create({
   uploadBtnDisabled: { backgroundColor: COLORS.border, opacity: 0.6 },
   uploadBtnText:     { fontSize: 16, fontWeight: '700', color: '#fff' },
   btnLoading:        { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  analysisBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.purple + '20',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.purple + '40',
+  },
+  analysisStepText: { flex: 1, fontSize: 13, color: COLORS.purple, fontWeight: '500' },
 
   // ── Error card ──
   errorCard: {
