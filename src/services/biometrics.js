@@ -70,6 +70,16 @@ export const isBiometricAuthRecent = async () => {
   }
 };
 
+/**
+ * Clears the stored auth timestamp so the next login triggers a fresh biometric prompt.
+ * Call this on failed session restore to prevent an infinite retry loop.
+ */
+export const clearBiometricAuthTime = async () => {
+  try {
+    await AsyncStorage.removeItem(KEY_LAST_AUTH);
+  } catch {}
+};
+
 // ── Authenticate ──────────────────────────────────────────────────────────────
 
 /**

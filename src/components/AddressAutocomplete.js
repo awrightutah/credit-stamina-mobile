@@ -23,7 +23,7 @@ const getComponent = (components, type, useShort = false) => {
   return found ? (useShort ? found.short_name : found.long_name) : '';
 };
 
-const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 Main St', style }) => {
+const AddressAutocomplete = ({ initialValue = '', onSelect, onChangeText, placeholder = '123 Main St', style }) => {
   const [text, setText]               = useState(initialValue);
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading]         = useState(false);
@@ -53,6 +53,7 @@ const AddressAutocomplete = ({ initialValue = '', onSelect, placeholder = '123 M
 
   const handleChangeText = (value) => {
     setText(value);
+    if (onChangeText) onChangeText(value); // keep parent state in sync even without a selection
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchPredictions(value), 320);
   };

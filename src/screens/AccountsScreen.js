@@ -359,6 +359,7 @@ const AccountsScreen = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [error, setError] = useState(null);
   const [expandedSections, setExpandedSections] = useState({});
+  const [showBureauInfo, setShowBureauInfo] = useState(false);
 
   // Create / Edit modal
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -544,12 +545,40 @@ const AccountsScreen = ({ navigation }) => {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Credit Accounts</Text>
-          <Text style={styles.subtitle}>{accounts.length} accounts tracked</Text>
+          <View style={styles.subtitleRow}>
+              <Text style={styles.subtitle}>{accounts.length} accounts tracked</Text>
+              <TouchableOpacity
+                onPress={() => setShowBureauInfo(v => !v)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.infoIcon, showBureauInfo && styles.infoIconActive]}>  ⓘ</Text>
+              </TouchableOpacity>
+            </View>
         </View>
         <TouchableOpacity style={styles.addAccountBtn} onPress={openCreateModal} activeOpacity={0.7}>
           <Text style={styles.addAccountBtnText}>+ Add</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Bureau Info Banner */}
+      {showBureauInfo && (
+        <View style={styles.infoBanner}>
+          <View style={styles.infoBannerHeader}>
+            <Text style={styles.infoBannerTitle}>Why am I seeing multiple accounts?</Text>
+            <TouchableOpacity
+              onPress={() => setShowBureauInfo(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.infoBannerClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.infoBannerText}>
+            It is common to see the same account listed multiple times. This happens because creditors report your accounts to multiple credit bureaus (TransUnion, Equifax, and Experian) separately. For example, one credit card may appear three times — once for each bureau that has it on record. This is completely normal and helps you track how each bureau is reporting your accounts.
+          </Text>
+        </View>
+      )}
 
       {/* Search */}
       <View style={styles.searchContainer}>
@@ -1328,6 +1357,56 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     fontWeight: '500',
     fontSize: 14,
+  },
+  // Bureau info banner
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  infoIcon: {
+    fontSize: 15,
+    color: '#38BDF8',
+    lineHeight: 20,
+  },
+  infoIconActive: {
+    color: '#7DD3FC',
+  },
+  infoBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    backgroundColor: '#0C1F3D',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#38BDF8',
+    padding: 14,
+  },
+  infoBannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 9,
+  },
+  infoBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#38BDF8',
+    flex: 1,
+    marginRight: 10,
+    lineHeight: 18,
+  },
+  infoBannerClose: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  infoBannerText: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    lineHeight: 20,
   },
   // Form inputs for create/edit modal
   formInput: {

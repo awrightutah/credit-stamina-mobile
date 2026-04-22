@@ -294,6 +294,9 @@ const ScoreScreen = ({ route }) => {
   const [aiTips, setAiTips] = useState(null);
   const [tipsLoading, setTipsLoading] = useState(false);
 
+  // Chart tap callout
+  const [selectedBar, setSelectedBar] = useState(null); // { score, date, bureau }
+
   useEffect(() => {
     AsyncStorage.getItem(GOAL_KEY).then(val => {
       if (val) {
@@ -443,19 +446,53 @@ const ScoreScreen = ({ route }) => {
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Score History</Text>
+
+        {/* Tap callout — shown when a bar is selected */}
+        {selectedBar && (
+          <TouchableOpacity
+            style={styles.chartCallout}
+            onPress={() => setSelectedBar(null)}
+            activeOpacity={0.9}
+          >
+            <Text style={[styles.chartCalloutScore, { color: getScoreColor(selectedBar.score) }]}>
+              {selectedBar.score}
+            </Text>
+            <Text style={styles.chartCalloutDate}>{selectedBar.date}</Text>
+            {selectedBar.bureau ? (
+              <Text style={styles.chartCalloutBureau}>{selectedBar.bureau}</Text>
+            ) : null}
+            <Text style={styles.chartCalloutDismiss}>Tap to dismiss</Text>
+          </TouchableOpacity>
+        )}
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartScroll}>
           {chartScores.map((s, i) => {
             const sc = s.score || 0;
             const barH = Math.max(6, ((sc - 300) / 550) * CHART_HEIGHT);
             const color = getScoreColor(sc);
+            const isSelected = selectedBar?.score === sc &&
+              selectedBar?.date === formatDate(s.recorded_date || s.reported_at);
             return (
-              <View key={s.id ?? `score-${i}`} style={styles.barWrapper}>
+              <TouchableOpacity
+                key={s.id ?? `score-${i}`}
+                style={styles.barWrapper}
+                onPress={() => setSelectedBar({
+                  score: sc,
+                  date: formatDate(s.recorded_date || s.reported_at),
+                  bureau: s.bureau ?? null,
+                })}
+                activeOpacity={0.75}
+              >
                 <Text style={[styles.barLabel, { color }]}>{sc}</Text>
                 <View style={[styles.barTrack, { height: CHART_HEIGHT }]}>
-                  <View style={[styles.bar, { height: barH, width: barWidth, backgroundColor: color }]} />
+                  <View style={[
+                    styles.bar,
+                    { height: barH, width: barWidth, backgroundColor: color },
+                    isSelected && { opacity: 1, borderWidth: 2, borderColor: '#fff' },
+                  ]} />
                 </View>
                 <Text style={styles.barDate}>{formatDate(s.recorded_date || s.reported_at)}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
@@ -862,6 +899,19 @@ const styles = StyleSheet.create({
   barTrack: { justifyContent: 'flex-end' },
   bar: { borderRadius: 4 },
   barDate: { fontSize: 9, color: COLORS.textSecondary, marginTop: 6, width: 44, textAlign: 'center' },
+  chartCallout: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  chartCalloutScore: { fontSize: 28, fontWeight: '800' },
+  chartCalloutDate: { fontSize: 13, color: COLORS.text, marginTop: 2 },
+  chartCalloutBureau: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  chartCalloutDismiss: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8, fontStyle: 'italic' },
 
   // Range legend
   rangeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

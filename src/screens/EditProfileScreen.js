@@ -239,6 +239,7 @@ const EditProfileScreen = ({ navigation }) => {
               initialValue={street}
               placeholder="123 Main St, Apt 4B"
               onSelect={handleAddressSelect}
+              onChangeText={setStreet}
             />
           </View>
 

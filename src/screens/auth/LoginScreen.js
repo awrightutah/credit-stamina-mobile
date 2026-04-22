@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../services/supabase';
 import {
   checkBiometricAvailability,
   getBiometricLabel,
@@ -22,6 +23,8 @@ import {
   getLastBiometricUserId,
   recordBiometricAuthTime,
   isBiometricAuthRecent,
+  updateBiometricSession,
+  clearBiometricAuthTime,
 } from '../../services/biometrics';
 
 const COLORS = {
@@ -42,7 +45,7 @@ const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
-  const { login, loginWithSession, session, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth();
+  const { login, session, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth();
 
   // Show session-expired message (set by AuthContext when refresh token is stale)
   useEffect(() => {
@@ -86,13 +89,21 @@ const LoginScreen = ({ navigation }) => {
         if (recentAuth) {
           setBioLoading(true);
           try {
-            await Promise.race([
-              loginWithSession(stored),
+            const { data, error: sessErr } = await Promise.race([
+              supabase.auth.setSession({
+                access_token: stored.access_token,
+                refresh_token: stored.refresh_token,
+              }),
               new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
             ]);
-            // AuthContext navigates away on success — nothing else to do
+            if (sessErr) throw sessErr;
+            if (!data?.session) throw new Error('No session returned');
+            // Persist refreshed tokens so next launch has fresh ones
+            updateBiometricSession(data.session.user.id, data.session).catch(() => null);
+            // AuthContext's onAuthStateChange fires and navigates away — nothing else to do
           } catch {
             if (!cancelled) {
+              await clearBiometricAuthTime(); // prevent infinite remount loop
               setBioLoading(false);
               setShowPasswordForm(true);
             }
@@ -124,13 +135,21 @@ const LoginScreen = ({ navigation }) => {
       // Face ID passed — now restore the session (show spinner only during this step)
       setBioLoading(true);
       try {
-        await Promise.race([
-          loginWithSession(stored),
+        const { data, error: sessErr } = await Promise.race([
+          supabase.auth.setSession({
+            access_token: stored.access_token,
+            refresh_token: stored.refresh_token,
+          }),
           new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
         ]);
+        if (sessErr) throw sessErr;
+        if (!data?.session) throw new Error('No session returned');
+        // Persist refreshed tokens
+        updateBiometricSession(data.session.user.id, data.session).catch(() => null);
         await recordBiometricAuthTime();
-        // AuthContext navigates away on success
+        // AuthContext's onAuthStateChange fires and navigates away
       } catch {
+        await clearBiometricAuthTime(); // prevent remount loop on next render
         setBioLoading(false);
         setShowPasswordForm(true);
         setError('Your session has expired. Please sign in with your password.');
@@ -141,7 +160,7 @@ const LoginScreen = ({ navigation }) => {
       setShowPasswordForm(true);
       if (bioError) setError('Biometric authentication failed. Please use your password.');
     }
-  }, [biometryType, loginWithSession]);
+  }, [biometryType]);
 
   const handleBiometricPress = () => {
     if (!storedUserId) return;
