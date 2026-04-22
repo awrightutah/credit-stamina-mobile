@@ -20,6 +20,7 @@ import { scheduleLetterReminder, cancelLetterReminder } from '../services/notifi
 import PaymentModal from '../components/PaymentModal';
 import { useAuth } from '../context/AuthContext';
 import { useESignConsent } from '../hooks/useESignConsent';
+import AIDisclaimer from '../components/AIDisclaimer';
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -638,6 +639,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
                 <View style={styles.letterContentBox}>
                   <Text style={styles.letterContentText}>{currentLetter.content}</Text>
                 </View>
+                <AIDisclaimer style={styles.letterAIDisclaimer} />
               </View>
             )}
 
@@ -1564,6 +1566,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 20,
+  },
+  letterAIDisclaimer: {
+    marginTop: 10,
+    fontSize: 10,
   },
   copyBtn: {
     backgroundColor: COLORS.staminaBlue,

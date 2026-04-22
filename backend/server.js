@@ -1031,6 +1031,49 @@ app.delete('/api/user/clear-all', async (req, res) => {
   }
 });
 
+// ============================================
+// DELETE USER ACCOUNT (App Store required)
+// ============================================
+
+app.delete('/api/user/delete-account', async (req, res) => {
+  try {
+    const db   = await getSupabaseClient(req);
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const uid = user.id;
+
+    // Delete all user data from every table
+    await Promise.all([
+      db.from('action_queue').delete().eq('user_id', uid),
+      db.from('dispute_letters').delete().eq('user_id', uid),
+      db.from('score_history').delete().eq('user_id', uid),
+      db.from('credit_reports').delete().eq('user_id', uid),
+      db.from('profiles').delete().eq('id', uid).catch(() => null),
+      db.from('points').delete().eq('user_id', uid).catch(() => null),
+      db.from('billing').delete().eq('user_id', uid).catch(() => null),
+    ]);
+    await db.from('accounts').delete().eq('user_id', uid);
+
+    // Attempt auth user deletion using service role key (requires SUPABASE_SERVICE_ROLE_KEY env var)
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (serviceKey) {
+      try {
+        const { createClient: mkClient } = require('@supabase/supabase-js');
+        const adminClient = mkClient(supabaseUrl, serviceKey);
+        await adminClient.auth.admin.deleteUser(uid);
+        console.log(`[delete-account] Auth user ${uid} deleted via admin API`);
+      } catch (adminErr) {
+        console.warn('[delete-account] Admin user delete failed (non-fatal):', adminErr.message);
+      }
+    }
+
+    res.json({ message: 'Account deleted successfully', deleted: true });
+  } catch (e) {
+    console.error('[delete-account] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 

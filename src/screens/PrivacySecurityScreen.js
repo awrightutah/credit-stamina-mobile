@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { authAPI } from '../services/api';
 
 const COLORS = {
   background: '#0F172A',
@@ -50,7 +51,7 @@ const Section = ({ title, children }) => (
 
 const PrivacySecurityScreen = () => {
   const navigation = useNavigation();
-  const { user, forgotPassword } = useAuth();
+  const { user, forgotPassword, logout } = useAuth();
 
   const handleChangePassword = () => {
     Alert.alert(
@@ -84,13 +85,31 @@ const PrivacySecurityScreen = () => {
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Contact Support',
-              'To complete account deletion, email us at support@creditstamina.com from your registered address. We\'ll process your request within 48 hours.',
+              'Are you absolutely sure?',
+              `Type "DELETE" to confirm permanent deletion of your account for ${user?.email}.`,
               [
-                { text: 'OK' },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Email Support',
-                  onPress: () => Linking.openURL('mailto:support@creditstamina.com?subject=Account%20Deletion%20Request').catch(() => {}),
+                  text: 'Yes, Delete Everything',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await authAPI.deleteAccount();
+                      await logout?.();
+                    } catch (err) {
+                      Alert.alert(
+                        'Deletion Failed',
+                        'We could not delete your account automatically. Please email support@creditstamina.com and we\'ll process your request within 48 hours.',
+                        [
+                          { text: 'OK' },
+                          {
+                            text: 'Email Support',
+                            onPress: () => Linking.openURL('mailto:support@creditstamina.com?subject=Account%20Deletion%20Request').catch(() => {}),
+                          },
+                        ]
+                      );
+                    }
+                  },
                 },
               ]
             );

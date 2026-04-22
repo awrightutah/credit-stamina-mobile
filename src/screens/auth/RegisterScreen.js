@@ -58,6 +58,7 @@ const RegisterScreen = ({ navigation }) => {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState(false);
+  const [croaConsent, setCroaConsent] = useState(false);
 
   // Called when user selects a Google Places suggestion
   const handleAddressSelect = ({ street: s, city: c, state: st, zip: z }) => {
@@ -87,8 +88,9 @@ const RegisterScreen = ({ navigation }) => {
     if (!zip.trim())      { setError('Please enter your ZIP code'); return; }
     if (!email.trim())    { setError('Please enter your email'); return; }
     if (!password)        { setError('Please create a password'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (!croaConsent) { setError('Please review and acknowledge the required disclosures to continue.'); return; }
 
     // Check state availability before anything else
     try {
@@ -342,7 +344,7 @@ const RegisterScreen = ({ navigation }) => {
           <TextInput
             ref={passwordRef}
             style={styles.input}
-            placeholder="Minimum 6 characters"
+            placeholder="Minimum 8 characters"
             placeholderTextColor={COLORS.textSecondary}
             value={password}
             onChangeText={setPassword}
@@ -384,6 +386,34 @@ const RegisterScreen = ({ navigation }) => {
             onSubmitEditing={handleRegister}
           />
         </Field>
+
+        {/* ── CROA Required Disclosure ── */}
+        <View style={styles.croaBox}>
+          <Text style={styles.croaTitle}>Required Legal Disclosures (CROA)</Text>
+          <Text style={styles.croaText}>
+            Under the Credit Repair Organizations Act (15 U.S.C. §1679 et seq.):
+            {'\n\n'}• You have the right to dispute inaccurate information in your credit report
+            directly with the credit bureau at no charge.
+            {'\n\n'}• Credit Stamina cannot remove accurate, timely information from your credit
+            report, and cannot guarantee any specific result.
+            {'\n\n'}• You may cancel your membership within 3 business days of signing up, without
+            penalty, by emailing support@creditstamina.com.
+            {'\n\n'}• Credit Stamina will not charge any fee until after the agreed-upon services
+            have been fully performed.
+          </Text>
+          <TouchableOpacity
+            style={styles.croaCheckRow}
+            onPress={() => setCroaConsent(v => !v)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.croaCheckbox, croaConsent && styles.croaCheckboxChecked]}>
+              {croaConsent && <Text style={styles.croaCheckmark}>✓</Text>}
+            </View>
+            <Text style={styles.croaCheckLabel}>
+              I have read and understand my rights under the CROA
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Submit */}
         <TouchableOpacity
@@ -495,6 +525,64 @@ const styles = StyleSheet.create({
   },
   rowFlex2: { flex: 2 },
   rowFlex1: { flex: 1 },
+  croaBox: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  croaTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  croaText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  croaCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  croaCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#334155',
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  croaCheckboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  croaCheckmark: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  croaCheckLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text,
+    lineHeight: 19,
+    fontWeight: '500',
+  },
   button: {
     backgroundColor: COLORS.purple,
     borderRadius: 12,

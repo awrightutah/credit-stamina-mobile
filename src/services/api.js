@@ -101,13 +101,17 @@ export const authAPI = {
     // Note: Auth is handled by Supabase directly
     // This is a placeholder for any additional auth API calls
   },
-  
+
   getProfile: async () => {
     return api.get('/api/profile');
   },
-  
+
   updateProfile: async (data) => {
     return api.put('/api/profile', data);
+  },
+
+  deleteAccount: async () => {
+    return api.delete('/api/user/delete-account');
   },
 };
 

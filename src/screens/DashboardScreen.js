@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, budgetAPI, authAPI } from '../services/api';
 import QuickWinsModal from '../components/QuickWinsModal';
@@ -158,8 +159,9 @@ const DashboardScreen = ({ navigation }) => {
   }
 
   return (
+    <SafeAreaView style={styles.container} edges={['top']}>
     <ScrollView
-      style={styles.container}
+      style={styles.scrollFlex}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.powerPurple} />}
     >
@@ -430,6 +432,7 @@ const DashboardScreen = ({ navigation }) => {
         onComplete={fetchData}
       />
     </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -527,6 +530,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  scrollFlex: {
+    flex: 1,
+  },
   content: {
     paddingBottom: 40,
   },
@@ -537,7 +543,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 56,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
