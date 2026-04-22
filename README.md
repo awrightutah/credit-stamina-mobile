@@ -1,4 +1,50 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Credit Stamina — Mobile App
+
+A React Native credit repair app powered by AI, Supabase, and a Node/Express backend on Railway.
+
+---
+
+## Environment Variables
+
+### Mobile App (`src/config/env.js`)
+
+Copy `src/config/env.example.js` → `src/config/env.js` and fill in:
+
+```js
+export const SUPABASE_URL      = 'https://<your-project>.supabase.co';
+export const SUPABASE_ANON_KEY = '<your-anon-key>';   // safe for client-side
+export const API_URL           = 'https://<your-railway-app>.up.railway.app';
+```
+
+Also set your Google Places key in `src/config/googlePlacesKey.js`:
+
+```js
+export const GOOGLE_PLACES_API_KEY = '<your-google-places-api-key>';
+// Enable "Places API" in Google Cloud Console.
+// Restrict the key to iOS Bundle ID: com.creditstamina
+```
+
+### Backend Railway Environment Variables
+
+Go to your Railway project → **Variables** and add:
+
+| Variable | Description | Where to get it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude AI API key | console.anthropic.com → API Keys |
+| `SUPABASE_URL` | Your Supabase project URL | Supabase Dashboard → Settings → API |
+| `SUPABASE_ANON_KEY` | Supabase anonymous key | Supabase Dashboard → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Required for in-app account deletion.** Grants admin-level access — never expose client-side. | Supabase Dashboard → Settings → API → `service_role` key |
+| `PORT` | Railway sets this automatically — do not override |  |
+
+#### Why `SUPABASE_SERVICE_ROLE_KEY` is required
+
+The `/api/user/delete-account` endpoint deletes all user data from the database **and** removes the auth user record so they cannot sign back in. Removing the auth user requires the service role key (`supabase.auth.admin.deleteUser()`). Without it, table data is still cleared but the auth account remains — the user would be locked out but technically still exist in Supabase Auth.
+
+> **Security note:** The service role key bypasses Row Level Security. It is only used server-side in Railway. Never commit it or ship it in the mobile app bundle.
+
+---
+
+This is a [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
 # Getting Started
 

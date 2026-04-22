@@ -15,6 +15,14 @@ import { useAuth } from '../../context/AuthContext';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { supabase } from '../../services/supabase';
 import { statesAPI } from '../../services/api';
+import { friendlyAuthError } from '../../utils/authErrors';
+
+const formatPhone = (raw) => {
+  const d = raw.replace(/\D/g, '').slice(0, 10);
+  if (d.length <= 3) return d.length ? `(${d}` : '';
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+};
 
 const COLORS = {
   primary: '#1E40AF',
@@ -55,10 +63,12 @@ const RegisterScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [promoCode, setPromoCode]     = useState('');
 
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState('');
-  const [success, setSuccess]         = useState(false);
-  const [croaConsent, setCroaConsent] = useState(false);
+  const [loading, setLoading]               = useState(false);
+  const [error, setError]                   = useState('');
+  const [success, setSuccess]               = useState(false);
+  const [croaConsent, setCroaConsent]       = useState(false);
+  const [showPassword, setShowPass]         = useState(false);
+  const [showConfirmPass, setShowConfirm]   = useState(false);
 
   // Called when user selects a Google Places suggestion
   const handleAddressSelect = ({ street: s, city: c, state: st, zip: z }) => {
@@ -164,7 +174,7 @@ const RegisterScreen = ({ navigation }) => {
 
       setSuccess(true);
     } catch (err) {
-      setError(err.message || 'Failed to create account');
+      setError(friendlyAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -251,7 +261,7 @@ const RegisterScreen = ({ navigation }) => {
             placeholder="(555) 555-5555"
             placeholderTextColor={COLORS.textSecondary}
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(text) => setPhone(formatPhone(text))}
             keyboardType="phone-pad"
             returnKeyType="next"
             onSubmitEditing={() => streetRef.current?.focus()}
@@ -341,33 +351,51 @@ const RegisterScreen = ({ navigation }) => {
         </Field>
 
         <Field label="Password *">
-          <TextInput
-            ref={passwordRef}
-            style={styles.input}
-            placeholder="Minimum 8 characters"
-            placeholderTextColor={COLORS.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            returnKeyType="next"
-            onSubmitEditing={() => confirmRef.current?.focus()}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={passwordRef}
+              style={styles.inputInner}
+              placeholder="Minimum 8 characters"
+              placeholderTextColor={COLORS.textSecondary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPass(v => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+            </TouchableOpacity>
+          </View>
         </Field>
 
         <Field label="Confirm Password *">
-          <TextInput
-            ref={confirmRef}
-            style={styles.input}
-            placeholder="Re-enter password"
-            placeholderTextColor={COLORS.textSecondary}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            returnKeyType="next"
-            onSubmitEditing={() => promoRef.current?.focus()}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={confirmRef}
+              style={styles.inputInner}
+              placeholder="Re-enter password"
+              placeholderTextColor={COLORS.textSecondary}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showConfirmPass}
+              autoCapitalize="none"
+              returnKeyType="next"
+              onSubmitEditing={() => promoRef.current?.focus()}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowConfirm(v => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.eyeText}>{showConfirmPass ? 'Hide' : 'Show'}</Text>
+            </TouchableOpacity>
+          </View>
         </Field>
 
         {/* ── Promo Code (optional) ── */}
@@ -518,6 +546,29 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 15,
     color: COLORS.text,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+  },
+  inputInner: {
+    flex: 1,
+    padding: 14,
+    fontSize: 15,
+    color: COLORS.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  eyeText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',

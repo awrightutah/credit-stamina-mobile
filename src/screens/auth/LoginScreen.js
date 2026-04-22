@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../services/supabase';
+import { friendlyAuthError } from '../../utils/authErrors';
 import {
   checkBiometricAvailability,
   getBiometricLabel,
@@ -41,10 +42,11 @@ const COLORS = {
 };
 
 const LoginScreen = ({ navigation }) => {
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPassword, setShowPass] = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
   const { login, session, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth();
 
   // Show session-expired message (set by AuthContext when refresh token is stale)
@@ -222,7 +224,7 @@ const LoginScreen = ({ navigation }) => {
         }
       }
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Check your email and password.');
+      setError(friendlyAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -322,16 +324,25 @@ const LoginScreen = ({ navigation }) => {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  placeholderTextColor={COLORS.textSecondary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoComplete="password"
-                />
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.inputInner}
+                    placeholder="Enter your password"
+                    placeholderTextColor={COLORS.textSecondary}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoComplete="password"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowPass(v => !v)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <TouchableOpacity
@@ -504,6 +515,29 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: COLORS.text,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+  },
+  inputInner: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  eyeText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   forgotPassword: {
     alignSelf: 'flex-end',

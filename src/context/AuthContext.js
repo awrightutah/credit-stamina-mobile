@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPassword, updateUserProfile, isRefreshTokenError, clearStoredSession } from '../services/supabase';
 import { setStoredToken, authAPI } from '../services/api';
 import { updateBiometricSession } from '../services/biometrics';
+import { friendlyAuthError } from '../utils/authErrors';
 // Push notification helpers — imported lazily inside login() to avoid
 // NativeEventEmitter initialization before the bridge is ready.
 const getPushHelpers = () => {
@@ -106,7 +107,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (e) {
-      setError(e.message);
+      setError(friendlyAuthError(e));
       throw e;
     } finally {
       setLoading(false);
@@ -126,7 +127,7 @@ export const AuthProvider = ({ children }) => {
       );
       return data;
     } catch (e) {
-      setError(e.message);
+      setError(friendlyAuthError(e));
       throw e;
     } finally {
       setLoading(false);
@@ -223,7 +224,7 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       await resetPassword(email);
     } catch (e) {
-      setError(e.message);
+      setError(friendlyAuthError(e));
       throw e;
     }
   };
