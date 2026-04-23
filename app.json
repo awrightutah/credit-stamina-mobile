@@ -5,7 +5,7 @@
   "description": "AI-powered credit repair assistant to help improve your credit score",
   "ios": {
     "bundleIdentifier": "com.creditstamina.app",
-    "buildNumber": "5",
+    "buildNumber": "6",
     "supportsTablet": true,
     "infoPlist": {
       "NSCameraUsageDescription": "Credit Stamina needs camera access to scan documents.",
