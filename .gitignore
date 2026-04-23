@@ -79,3 +79,17 @@ src/config/env.js
 src/config/googlePlacesKey.js
 .env
 .env.local
+
+# Xcode export/archive folders (contain Apple Team ID, email, and signing info)
+ios/CreditStamina */
+ios/CreditStamina*.xcarchive/
+
+# Duplicate/backup files (created by macOS Finder copy operations)
+*\ 2.json
+*\ 2.lock
+*\ 2.xcodeproj/
+*\ 2.xcworkspace/
+"ios/Podfile 2"
+"ios/Podfile 2.lock"
+"ios/Podfile 3.lock"
+"package-lock 2.json"
