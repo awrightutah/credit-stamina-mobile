@@ -10,6 +10,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SubscriptionProvider } from './src/context/SubscriptionContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import navigationRef from './src/navigation/navigationRef';
 import useNetworkStatus from './src/hooks/useNetworkStatus';
@@ -43,7 +44,9 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor="#0F0F1A" />
         <AuthProvider>
-          <AppContent />
+          <SubscriptionProvider>
+            <AppContent />
+          </SubscriptionProvider>
         </AuthProvider>
         <OfflineBanner visible={!isOnline} />
       </SafeAreaProvider>

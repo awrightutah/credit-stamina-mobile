@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { pointsAPI, billingAPI, smsAPI, notificationsAPI, adminAPI, POINTS_GOAL } from '../services/api';
 // Lazy-load push helpers so a missing/unready native module never crashes this screen
 const getPushHelpers = () => {
@@ -97,9 +98,9 @@ const SectionCard = ({ title, children }) => (
 const ProfileScreen = () => {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
+  const { subscription, refreshSubscription } = useSubscription();
   const [points, setPoints] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [subscription, setSubscription] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [upgradeVisible, setUpgradeVisible] = useState(false);
@@ -113,15 +114,12 @@ const ProfileScreen = () => {
 
   const fetchUserData = async () => {
     try {
-      const [pointsRes, billingRes, prefsRes] = await Promise.all([
+      const [pointsRes, prefsRes] = await Promise.all([
         pointsAPI.get().catch(() => null),
-        billingAPI.getInfo().catch(() => null),
         smsAPI.getPreferences().catch(() => null),
       ]);
       const raw = pointsRes?.data || pointsRes;
       setPoints(raw?.points ?? raw?.total ?? 0);
-      // billingAPI.getInfo() always returns { data: normalizedObject }
-      setSubscription(billingRes?.data ?? null);
       const prefs = prefsRes?.data?.preferences ?? prefsRes?.data ?? {};
       if (typeof prefs.sms_enabled === 'boolean') setSmsEnabled(prefs.sms_enabled);
 
@@ -213,7 +211,7 @@ const ProfileScreen = () => {
           onPress: async () => {
             try {
               await billingAPI.pauseSubscription();
-              fetchUserData();
+              refreshSubscription();
               Alert.alert('Subscription Paused', 'Your subscription has been paused. You can resume it at any time from this screen.');
             } catch {
               Alert.alert('Contact Support', 'To pause your subscription, please email support@creditstamina.com.');
@@ -236,7 +234,7 @@ const ProfileScreen = () => {
           onPress: async () => {
             try {
               await billingAPI.cancelSubscription();
-              fetchUserData();
+              refreshSubscription();
               Alert.alert(
                 'Subscription Cancelled',
                 'Your subscription has been cancelled. You\'ll retain full access until your current billing period ends.'
@@ -544,7 +542,7 @@ const ProfileScreen = () => {
         onClose={() => setUpgradeVisible(false)}
         onSuccess={() => {
           setUpgradeVisible(false);
-          fetchUserData(); // refresh subscription status
+          refreshSubscription();
           Alert.alert('Welcome to Pro!', 'Your subscription is now active. Enjoy full access to Credit Stamina.');
         }}
         amount={displayPrice}
