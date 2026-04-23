@@ -1122,9 +1122,99 @@ app.get('/api/places/details', async (req, res) => {
   }
 });
 
+// ============================================
+// ACTION PLAN (30/60/90 Day AI Plan)
+// ============================================
+
+app.post('/api/action-plan', async (req, res) => {
+  try {
+    const db = await getSupabaseClient(req);
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Use accounts passed from client, or fall back to fetching from DB
+    let accounts = req.body?.accounts || [];
+    if (!accounts.length) {
+      const { data } = await db.from('accounts')
+        .select('creditor, lane, current_balance, past_due_amount, status, account_type, bureau, account_number')
+        .eq('user_id', user.id)
+        .limit(30);
+      accounts = data || [];
+    }
+
+    const accountSummary = accounts.length > 0
+      ? accounts.map(a =>
+          `- ${a.creditor} (${a.account_type || 'unknown'}, ${a.bureau || 'unknown bureau'}): Lane=${a.lane}, Balance=$${a.current_balance || 0}, PastDue=$${a.past_due_amount || 0}, Status=${a.status}`
+        ).join('\n')
+      : 'No accounts on file.';
+
+    const prompt = `You are a credit repair expert. Generate a detailed 30/60/90-day action plan for this user based on their credit accounts.
+
+USER ACCOUNTS:
+${accountSummary}
+
+Return ONLY valid JSON in this exact structure (no markdown, no explanation):
+{
+  "summary": "2-3 sentence overview of the plan",
+  "potential_points": "estimated score improvement range e.g. +40-80 points",
+  "days_30": {
+    "theme": "Foundation & Quick Wins",
+    "score_impact": "estimated impact e.g. +15-25 points",
+    "tasks": [
+      {
+        "title": "Task title",
+        "description": "Specific action to take",
+        "priority": "high",
+        "category": "dispute",
+        "due_day": 7,
+        "estimated_impact": "+5-10 pts"
+      }
+    ]
+  },
+  "days_60": {
+    "theme": "Dispute & Follow-up",
+    "score_impact": "estimated impact",
+    "tasks": []
+  },
+  "days_90": {
+    "theme": "Build & Monitor",
+    "score_impact": "estimated impact",
+    "tasks": []
+  }
+}
+
+Rules:
+- Include 3-5 tasks per period
+- priority must be "high", "medium", or "low"
+- category examples: "dispute", "payment", "negotiation", "monitoring", "utilization"
+- due_day is the day within that period (1-30, 1-30, 1-30)
+- If no accounts exist, give general credit building tasks`;
+
+    const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const message = await anthropicClient.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = message.content[0].text.trim();
+    // Strip markdown code fences if Claude wrapped the JSON
+    const jsonText = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    const plan = JSON.parse(jsonText);
+
+    res.json({ plan });
+  } catch (e) {
+    console.error('[action-plan] error:', e.message);
+    if (e instanceof SyntaxError) {
+      return res.status(500).json({ error: 'AI returned invalid response. Please try again.' });
+    }
+    res.status(500).json({ error: e.message || 'Failed to generate action plan' });
+  }
+});
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
+  res.status(200).json({
+    status: 'healthy',
     message: 'Credit Stamina API is running',
     endpoints: [
       'POST /api/accounts', 'GET /api/accounts', 'DELETE /api/accounts/:id',
@@ -1134,7 +1224,8 @@ app.get('/api/health', (req, res) => {
       'GET /api/scores', 'POST /api/scores', 'DELETE /api/scores/:id',
       'GET /api/letters', 'POST /api/letters', 'PUT /api/letters/:id', 'DELETE /api/letters/:id',
       'POST /api/letters/generate',
-      'POST /api/ai-advisor'
+      'POST /api/ai-advisor',
+      'POST /api/action-plan'
     ]
   });
 });

@@ -97,8 +97,10 @@ const ActionPlanScreen = () => {
         AsyncStorage.setItem(PLAN_CACHE_KEY(user.id), JSON.stringify({ plan: normalizedPlan, savedAt: Date.now() })).catch(() => null);
       }
     } catch (err) {
-      console.error('[ActionPlan] error:', err?.response?.data || err.message);
-      setError(err?.response?.data?.error || err?.response?.data?.message || 'Failed to load action plan');
+      const detail = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Unknown error';
+      const status = err?.response?.status;
+      console.error(`[ActionPlan] error (HTTP ${status}):`, detail, err?.response?.data);
+      setError(status === 401 ? 'Please log in again to view your action plan.' : detail || 'Failed to load action plan');
     } finally {
       setLoading(false);
       setRefreshing(false);
