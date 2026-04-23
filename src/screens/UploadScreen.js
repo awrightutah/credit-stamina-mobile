@@ -732,8 +732,18 @@ const UploadScreen = ({ navigation }) => {
         <View style={styles.overlay}>
           <View style={styles.overlayBox}>
             <ActivityIndicator size="large" color={COLORS.purple} style={{ marginBottom: 16 }} />
-            <Text style={styles.overlayTitle}>AI is analyzing your accounts…</Text>
-            <Text style={styles.overlaySub}>This may take up to 60 seconds for large reports</Text>
+            <Text style={styles.overlayTitle}>Processing your report…</Text>
+            <Text style={styles.overlaySub}>Large reports may take up to 2 minutes</Text>
+            <View style={styles.overlaySteps}>
+              {[
+                'Uploading your report…',
+                'Reading your accounts…',
+                'AI is analyzing your credit…',
+                'Building your action plan…',
+              ].map((step, i) => (
+                <Text key={i} style={styles.overlayStepItem}>• {step}</Text>
+              ))}
+            </View>
           </View>
         </View>
       </Modal>
@@ -1081,8 +1091,10 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 300,
   },
-  overlayTitle: { fontSize: 17, fontWeight: '600', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
-  overlaySub:   { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center' },
+  overlayTitle:    { fontSize: 17, fontWeight: '600', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
+  overlaySub:      { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 12 },
+  overlaySteps:    { alignSelf: 'stretch', marginTop: 4 },
+  overlayStepItem: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
 });
 
 export default UploadScreen;

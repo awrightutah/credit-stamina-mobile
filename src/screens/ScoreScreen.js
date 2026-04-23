@@ -10,6 +10,10 @@ import {
   TextInput,
   Alert,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -737,7 +741,13 @@ const ScoreScreen = ({ route }) => {
         animationType="slide"
         onRequestClose={() => setLogModalVisible(false)}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Log Credit Score</Text>
 
@@ -789,7 +799,7 @@ const ScoreScreen = ({ route }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Set Goal Modal ── */}
@@ -799,7 +809,13 @@ const ScoreScreen = ({ route }) => {
         animationType="slide"
         onRequestClose={() => setGoalModalVisible(false)}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Set Score Goal</Text>
             <Text style={styles.goalHint}>
@@ -840,7 +856,7 @@ const ScoreScreen = ({ route }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

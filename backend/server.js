@@ -1212,6 +1212,193 @@ Rules:
   }
 });
 
+// ── Budget Routes ──────────────────────────────────────────
+app.get('/api/budget', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const { data, error } = await client
+      .from('budget')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      if (error.code === '42P01') return res.json({ budget: null });
+      throw error;
+    }
+    res.json({ budget: data });
+  } catch (err) {
+    console.error('[GET /api/budget]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/budget', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const payload = { ...req.body, user_id: user.id };
+    delete payload.user_token;
+    delete payload.access_token;
+    const { data, error } = await client.from('budget').insert(payload).select().single();
+    if (error) throw error;
+    res.json({ budget: data });
+  } catch (err) {
+    console.error('[POST /api/budget]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/budget/:id', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const payload = { ...req.body };
+    delete payload.user_token;
+    delete payload.access_token;
+    const { data, error } = await client.from('budget').update(payload).eq('id', req.params.id).eq('user_id', user.id).select().single();
+    if (error) throw error;
+    res.json({ budget: data });
+  } catch (err) {
+    console.error('[PUT /api/budget/:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Budget Payment Plans Routes ────────────────────────────
+app.get('/api/budget/payment-plans', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const { data, error } = await client
+      .from('payment_plans')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      if (error.code === '42P01') return res.json({ plans: [] });
+      throw error;
+    }
+    res.json({ plans: data || [] });
+  } catch (err) {
+    console.error('[GET /api/budget/payment-plans]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/budget/payment-plans', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const payload = { ...req.body, user_id: user.id };
+    delete payload.user_token;
+    delete payload.access_token;
+    const { data, error } = await client.from('payment_plans').insert(payload).select().single();
+    if (error) throw error;
+    res.json({ plan: data });
+  } catch (err) {
+    console.error('[POST /api/budget/payment-plans]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/budget/payment-plans/:id', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const payload = { ...req.body };
+    delete payload.user_token;
+    delete payload.access_token;
+    const { data, error } = await client.from('payment_plans').update(payload).eq('id', req.params.id).eq('user_id', user.id).select().single();
+    if (error) throw error;
+    res.json({ plan: data });
+  } catch (err) {
+    console.error('[PUT /api/budget/payment-plans/:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/budget/payment-plans/:id', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+    const { error } = await client.from('payment_plans').delete().eq('id', req.params.id).eq('user_id', user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/budget/payment-plans/:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Score Improvement Tips ─────────────────────────────────
+app.post('/api/score-improvement-tips', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const client = await getSupabaseClient(req);
+
+    const { data: accounts } = await client
+      .from('credit_accounts')
+      .select('*')
+      .eq('user_id', user.id);
+
+    const { data: scores } = await client
+      .from('credit_scores')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(1);
+
+    const currentScore = scores?.[0]?.score || null;
+    const accountSummary = (accounts || []).map(a =>
+      `${a.creditor || 'Unknown'}: ${a.account_type || 'Unknown'}, balance $${a.current_balance || 0}, ` +
+      `limit $${a.credit_limit || 0}, status: ${a.status || 'Unknown'}, past due: $${a.past_due_amount || 0}`
+    ).join('\n');
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: `You are a credit repair expert. Based on this user's credit data, provide 5 specific, actionable tips to improve their credit score.
+
+Current Score: ${currentScore || 'Unknown'}
+Accounts:
+${accountSummary || 'No account data available'}
+
+Return ONLY a JSON array of 5 tip objects, no explanation:
+[
+  {
+    "title": "short tip title (max 50 chars)",
+    "description": "detailed actionable advice (max 200 chars)",
+    "impact": "High" | "Medium" | "Low",
+    "category": "Payment History" | "Credit Utilization" | "Credit Age" | "Credit Mix" | "New Credit"
+  }
+]`
+      }]
+    });
+
+    const text = message.content[0].text.trim();
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('No JSON array in AI response');
+    const tips = JSON.parse(jsonMatch[0]);
+    res.json({ tips });
+  } catch (err) {
+    console.error('[POST /api/score-improvement-tips]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
@@ -1225,7 +1412,10 @@ app.get('/api/health', (req, res) => {
       'GET /api/letters', 'POST /api/letters', 'PUT /api/letters/:id', 'DELETE /api/letters/:id',
       'POST /api/letters/generate',
       'POST /api/ai-advisor',
-      'POST /api/action-plan'
+      'POST /api/action-plan',
+      'GET /api/budget', 'POST /api/budget', 'PUT /api/budget/:id',
+      'GET /api/budget/payment-plans', 'POST /api/budget/payment-plans', 'PUT /api/budget/payment-plans/:id', 'DELETE /api/budget/payment-plans/:id',
+      'POST /api/score-improvement-tips'
     ]
   });
 });

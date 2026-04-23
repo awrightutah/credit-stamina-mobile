@@ -223,6 +223,7 @@ export const creditReportsAPI = {
   // Upload and parse credit report PDF with AI
   upload: async (formData, onProgress) => {
     const config = {
+      timeout: 120000,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
