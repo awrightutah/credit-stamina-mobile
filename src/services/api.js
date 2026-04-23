@@ -713,7 +713,7 @@ export const billingAPI = {
 
   // Pause subscription via Railway
   pauseSubscription: async () => {
-    return api.post('/api/billing/pause');
+    return api.post('/api/subscription/pause');
   },
 
   // Cancel: use subscription ID from getInfo, then DELETE /api/billing/subscription/:id
@@ -868,23 +868,24 @@ export const budgetAPI = {
   },
   
   update: async (data) => {
-    return api.put('/api/budget', data);
+    // Real backend POST /api/budget does upsert (no PUT endpoint exists)
+    return api.post('/api/budget', data);
   },
-  
+
   getPaymentPlans: async () => {
-    return api.get('/api/budget/payment-plans');
+    return api.get('/api/debt-payment-plans');
   },
-  
+
   createPaymentPlan: async (data) => {
-    return api.post('/api/budget/payment-plans', data);
+    return api.post('/api/debt-payment-plans', data);
   },
 
   updatePaymentPlan: async (id, data) => {
-    return api.put(`/api/budget/payment-plans/${id}`, data);
+    return api.put(`/api/debt-payment-plans/${id}`, data);
   },
 
   deletePaymentPlan: async (id) => {
-    return api.delete(`/api/budget/payment-plans/${id}`);
+    return api.delete(`/api/debt-payment-plans/${id}`);
   },
 };
 
