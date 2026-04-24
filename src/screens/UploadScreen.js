@@ -633,7 +633,7 @@ const UploadScreen = ({ navigation }) => {
                   We're analyzing your accounts in the background.
                 </Text>
                 <Text style={[styles.resultSub, { marginTop: 6 }]}>
-                  Check back in about a minute and your accounts will be ready to view.
+                  Check back in a few minutes and your accounts will be ready to view.
                 </Text>
               </View>
             </View>
