@@ -455,18 +455,25 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
       Alert.alert('Address Required', 'Please fill in the recipient address and zip code.');
       return;
     }
-    // Open payment modal — payment success triggers the actual Click2Mail submission
+    // Open payment modal in 'collect' mode — we don't charge here. The
+    // backend charges + mails atomically in /api/letters/:id/mail, so we
+    // just need the card data handed back to us.
     setPaymentVisible(true);
   };
 
-  const handlePaymentSuccess = async () => {
+  const handlePaymentSuccess = async ({ cardData } = {}) => {
     setPaymentVisible(false);
+    if (!cardData) {
+      Alert.alert('Card Required', 'We could not read your card details. Please try again.');
+      return;
+    }
     setMailLoading(true);
     try {
-      await lettersAPI.mailViaClick2Mail(currentLetter.id, {
-        recipientName, recipientAddress, recipientCity, recipientState, recipientZip,
+      const res = await lettersAPI.mailViaUSPS(currentLetter.id, {
+        recipientName, recipientAddress, recipientCity, recipientState, recipientZip, cardData,
       });
-      setCurrentLetter(prev => ({ ...prev, status: 'sent', send_status: 'sent', sent_date: new Date().toISOString() }));
+      const trackingNumber = res?.data?.tracking_number || null;
+      setCurrentLetter(prev => ({ ...prev, status: 'sent', send_status: 'sent', sent_date: new Date().toISOString(), tracking_number: trackingNumber }));
       onLetterUpdated?.();
       setShowMailForm(false);
       // Schedule follow-up reminder (30 days for bureaus, 14 for creditors)
@@ -483,12 +490,13 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
         `${getLetterTypeLabel(currentLetter.letter_type)} sent to ${recipientName}`,
         { letter_id: currentLetter.id, letter_type: currentLetter.letter_type, bureau: currentLetter.bureau }
       );
+      const trackingLine = trackingNumber ? `\n\nTracking: ${trackingNumber}` : '';
       Alert.alert(
         'Letter Mailed! ✉️',
-        `Your letter has been submitted via USPS and will be delivered within 3-5 business days.\n\nYou'll receive a reminder to follow up in ${isBureau ? 30 : 14} days.`
+        `Your letter has been submitted via USPS and will be delivered within 3–5 business days.${trackingLine}\n\nYou'll receive a reminder to follow up in ${isBureau ? 30 : 14} days.`
       );
     } catch (err) {
-      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Payment succeeded but mailing failed. Please contact support.';
+      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Mailing failed. Please try again.';
       Alert.alert('Mailing Error', msg);
     } finally {
       setMailLoading(false);
@@ -587,14 +595,19 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
     }
   };
 
-  const handleEscalationPaymentSuccess = async () => {
+  const handleEscalationPaymentSuccess = async ({ cardData } = {}) => {
     setEscalationPaymentVisible(false);
+    if (!cardData) {
+      Alert.alert('Card Required', 'We could not read your card details. Please try again.');
+      return;
+    }
     setEscalationMailLoading(true);
     const targetId = generatedEscalationId || currentLetter.id;
     try {
-      await lettersAPI.mailViaClick2Mail(targetId, {
-        recipientName, recipientAddress, recipientCity, recipientState, recipientZip,
+      const res = await lettersAPI.mailViaUSPS(targetId, {
+        recipientName, recipientAddress, recipientCity, recipientState, recipientZip, cardData,
       });
+      const trackingNumber = res?.data?.tracking_number || null;
       const isBureau = ['equifax','experian','transunion'].some(b =>
         (currentLetter.bureau || '').toLowerCase().includes(b)
       );
@@ -606,9 +619,10 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
         { letter_id: targetId, letter_type: currentLetter.letter_type }
       );
       setShowEscalation(false);
-      Alert.alert('Escalation Letter Mailed!', 'Your follow-up letter has been submitted via USPS. A reminder will be sent when follow-up is due.');
+      const trackingLine = trackingNumber ? `\n\nTracking: ${trackingNumber}` : '';
+      Alert.alert('Escalation Letter Mailed!', `Your follow-up letter has been submitted via USPS. A reminder will be sent when follow-up is due.${trackingLine}`);
     } catch (err) {
-      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Mailing failed. Please contact support.';
+      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Mailing failed. Please try again.';
       Alert.alert('Mailing Error', msg);
     } finally {
       setEscalationMailLoading(false);
@@ -694,7 +708,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
                     style={[styles.mailToggleBtn, !isSigned && styles.mailToggleBtnDisabled]}
                     onPress={() => isSigned ? setShowMailForm(true) : Alert.alert('Sign First', 'Sign the letter before mailing.')}
                   >
-                    <Text style={styles.mailToggleBtnText}>Mail via Click2Mail — $1.99</Text>
+                    <Text style={styles.mailToggleBtnText}>Mail via USPS — $2.99</Text>
                   </TouchableOpacity>
                 ) : (
                   <>
@@ -943,26 +957,26 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
         </View>
       </View>
 
-      {/* Authorize.net payment sheet for Click2Mail mailing fee */}
+      {/* Card collector — backend charges + mails atomically via /api/letters/:id/mail */}
       <PaymentModal
         visible={paymentVisible}
         onClose={() => setPaymentVisible(false)}
         onSuccess={handlePaymentSuccess}
-        amount={1.99}
-        description={`USPS mailing via Click2Mail — ${getLetterTypeLabel(currentLetter.letter_type)} to ${recipientName || currentLetter.bureau}`}
-        mode="charge"
-        submitLabel="Pay $1.99 & Send Letter"
+        amount={2.99}
+        description={`USPS first-class mailing — ${getLetterTypeLabel(currentLetter.letter_type)} to ${recipientName || currentLetter.bureau}`}
+        mode="collect"
+        submitLabel="Pay $2.99 & Send Letter"
       />
 
-      {/* Payment for escalation / follow-up letter mailing */}
+      {/* Card collector for escalation / follow-up letter mailing */}
       <PaymentModal
         visible={escalationPaymentVisible}
         onClose={() => setEscalationPaymentVisible(false)}
         onSuccess={handleEscalationPaymentSuccess}
-        amount={1.99}
-        description={`USPS mailing — Follow-up letter to ${recipientName || currentLetter.bureau}`}
-        mode="charge"
-        submitLabel="Pay $1.99 & Send Follow-Up"
+        amount={2.99}
+        description={`USPS first-class mailing — Follow-up letter to ${recipientName || currentLetter.bureau}`}
+        mode="collect"
+        submitLabel="Pay $2.99 & Send Follow-Up"
       />
     </Modal>
   );

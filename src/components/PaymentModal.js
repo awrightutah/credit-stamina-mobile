@@ -7,7 +7,10 @@
  *   onSuccess      {(result) => void}  called with backend response on success
  *   amount         {number}            charge amount in USD (e.g. 1.99)
  *   description    {string}            shown to user & sent to backend
- *   mode           {'charge'|'subscribe'}  default 'charge'
+ *   mode           {'charge'|'subscribe'|'collect'}  default 'charge'
+ *                   'collect' skips the server round-trip and returns
+ *                   { cardData } to onSuccess — use when the caller will
+ *                   submit card + payload to a different endpoint itself.
  *   planId         {string}            required when mode === 'subscribe'
  *   submitLabel    {string}            override button text
  */
@@ -162,6 +165,15 @@ const PaymentModal = ({
       const error = validateCard(cardData);
       if (error) {
         Alert.alert('Invalid Card', error);
+        return;
+      }
+
+      // mode='collect' — hand the validated card back to the caller without
+      // hitting any server. The caller submits card + payload to its own
+      // endpoint (e.g. /api/letters/:id/mail which does charge+mail atomically).
+      if (mode === 'collect') {
+        onSuccess?.({ cardData });
+        onClose();
         return;
       }
 

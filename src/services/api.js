@@ -319,14 +319,21 @@ export const lettersAPI = {
     return api.put(`/api/letters/${id}`, { signature_name: signatureName, signed_at: new Date().toISOString() });
   },
 
-  // Submit letter to Click2Mail for USPS mailing (backend handles payment + Click2Mail API)
-  mailViaClick2Mail: async (id, { recipientName, recipientAddress, recipientCity, recipientState, recipientZip }) => {
+  // Submit letter for USPS first-class mailing. Backend charges $2.99 via
+  // Authorize.net then submits to the mailing vendor atomically — a failed
+  // charge blocks mailing, and a failed mailing voids the charge.
+  mailViaUSPS: async (id, { recipientName, recipientAddress, recipientCity, recipientState, recipientZip, cardData }) => {
     return api.post(`/api/letters/${id}/mail`, {
       recipient_name:    recipientName,
       recipient_address: recipientAddress,
       recipient_city:    recipientCity,
       recipient_state:   recipientState,
       recipient_zip:     recipientZip,
+      card_number:       cardData.cardNumber.replace(/\s/g, ''),
+      expiry_month:      cardData.expiryMonth,
+      expiry_year:       cardData.expiryYear,
+      cvv:               cardData.cvv,
+      cardholder_name:   cardData.cardholderName,
     });
   },
 
