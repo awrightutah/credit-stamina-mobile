@@ -441,9 +441,12 @@ const ProfileScreen = () => {
 
         {/* Account */}
         <SectionCard title="ACCOUNT">
-          {/* Family Plan temporarily hidden until the invite/accept flow is fully wired.
-              Backend routes (/api/household/*) and FamilyScreen.js are left in place
-              for a later release so we don't lose the groundwork. */}
+          <MenuItem
+            icon="👨‍👩‍👧"
+            title="Family"
+            subtitle="Invite a household member — they use your subscription"
+            onPress={() => navigation.navigate('Family')}
+          />
           <MenuItem
             icon="✏️"
             title="Edit Profile"

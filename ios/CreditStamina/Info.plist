@@ -66,5 +66,16 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.creditstamina.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>creditstamina</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

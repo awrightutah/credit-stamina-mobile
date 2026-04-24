@@ -28,9 +28,20 @@ function AppContent() {
     );
   }
 
+  // Universal linking config. The creditstamina:// scheme is registered in
+  // ios/CreditStamina/Info.plist. Accept-invite deep link:
+  //   creditstamina://accept?token=XYZ  → AcceptInvite screen with { token }
+  const linking = {
+    prefixes: ['creditstamina://'],
+    config: {
+      screens: {
+        AcceptInvite: 'accept',
+      },
+    },
+  };
+
   return (
-    // ref wired here so push-notification deep links work from anywhere in the app
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <AppNavigator />
     </NavigationContainer>
   );

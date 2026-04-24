@@ -35,6 +35,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import BillingHistoryScreen from '../screens/BillingHistoryScreen';
 import DisputeTrackerScreen from '../screens/DisputeTrackerScreen';
 import FamilyScreen from '../screens/FamilyScreen';
+import AcceptInviteScreen from '../screens/AcceptInviteScreen';
 import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
 import AdminScreen from '../screens/AdminScreen';
 
@@ -172,6 +173,7 @@ const AppNavigator = () => {
         <Stack.Screen name="BillingHistory" component={BillingHistoryScreen} />
         <Stack.Screen name="DisputeTracker" component={DisputeTrackerScreen} />
         <Stack.Screen name="Family" component={FamilyScreen} />
+        <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} options={{ headerShown: true, title: 'Accept Invitation' }} />
         <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
         <Stack.Screen name="Admin" component={AdminScreen} />
         <Stack.Screen name="ESignConsent" component={ESignConsentScreen} />

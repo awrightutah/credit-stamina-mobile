@@ -1025,6 +1025,11 @@ export const householdAPI = {
   cancelInvite: async (inviteId) => {
     return api.delete(`/api/household/invite/${inviteId}`);
   },
+
+  // Accept an invitation using the token delivered by email / deep link.
+  accept: async (token) => {
+    return api.post('/api/household/accept', { token });
+  },
 };
 
 // ============================================
