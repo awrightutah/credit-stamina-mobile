@@ -497,9 +497,9 @@ Keep advice practical and specific to my numbers.`;
         {billsError ? (
           <View style={styles.billsErrorCard}>
             <Text style={styles.billsErrorIcon}>⚠️</Text>
-            <Text style={styles.billsErrorTitle}>Bills Table Not Set Up</Text>
+            <Text style={styles.billsErrorTitle}>Bills tracking unavailable</Text>
             <Text style={styles.billsErrorText}>
-              To enable bills tracking, create a <Text style={{ fontWeight: '700', color: COLORS.text }}>bills</Text> table in your Supabase project with columns: id (uuid), user_id (uuid), name (text), amount (numeric), due_day (int2), category (text), created_at (timestamptz).
+              We're having trouble loading your bills right now. Please try again in a few minutes, or contact support if this keeps happening.
             </Text>
           </View>
         ) : bills.length === 0 ? (

@@ -133,7 +133,7 @@ const PrivacySecurityScreen = () => {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {/* Account security info */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>🔐 Your account is secured with Supabase Auth</Text>
+          <Text style={styles.infoTitle}>🔐 Your account is secured with encrypted storage</Text>
           <Text style={styles.infoText}>
             Passwords are hashed and never stored in plain text. Sessions are encrypted and expire automatically. Face ID / Touch ID credentials never leave your device.
           </Text>

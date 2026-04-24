@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { friendlyAuthError } from '../utils/authErrors';
 import { smsAPI } from '../services/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
@@ -100,7 +101,7 @@ const EditProfileScreen = ({ navigation }) => {
       // Brief delay so the user sees the confirmation, then go back
       setTimeout(() => navigation.goBack(), 1000);
     } catch (err) {
-      setError(err.message || 'Failed to save profile');
+      setError(friendlyAuthError(err) || 'Failed to save profile');
     } finally {
       setSaving(false);
     }

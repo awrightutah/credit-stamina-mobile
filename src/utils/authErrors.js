@@ -25,12 +25,14 @@ export const friendlyAuthError = (error) => {
     if (match.test(raw)) return msg;
   }
 
-  // Strip "AuthApiError: " prefix that Supabase sometimes includes
+  // Strip internal "AuthApiError: " prefix
   const stripped = raw.replace(/^AuthApiError:\s*/i, '').trim();
 
-  // If what remains looks like a technical string (contains stack trace markers,
-  // long hex, or brackets), show a generic fallback instead
-  if (!stripped || /[\[\{]|0x[0-9a-f]{4,}|at [A-Z]/i.test(stripped)) {
+  // Refuse to surface any string that leaks infrastructure, database, or
+  // stack-trace details — fall back to a generic message instead.
+  const leaksInfra = /supabase|railway|anthropic|postgres|pgrst|jwt|rls|relation\s+(does\s+not\s+exist|.*rls)|column\s+.*\s+does\s+not\s+exist/i.test(stripped);
+  const looksTechnical = /[\[\{]|0x[0-9a-f]{4,}|at [A-Z]/i.test(stripped);
+  if (!stripped || leaksInfra || looksTechnical) {
     return 'Something went wrong. Please try again.';
   }
 

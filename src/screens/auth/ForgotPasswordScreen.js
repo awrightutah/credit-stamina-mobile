@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { friendlyAuthError } from '../../utils/authErrors';
 
 const COLORS = {
   primary: '#3B82F6',
@@ -44,7 +45,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
       await forgotPassword(email);
       setSuccess(true);
     } catch (err) {
-      setError(err.message || 'Failed to send reset email');
+      setError(friendlyAuthError(err) || 'Failed to send reset email');
     } finally {
       setLoading(false);
     }

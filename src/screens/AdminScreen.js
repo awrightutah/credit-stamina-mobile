@@ -613,7 +613,7 @@ const AdminScreen = () => {
                 {activity.length === 0 ? (
                   <View style={styles.centered}>
                     <Text style={styles.emptyText}>No recent activity found.</Text>
-                    <Text style={styles.emptySubtext}>RLS may be restricting cross-user activity reads.</Text>
+                    <Text style={styles.emptySubtext}>Activity will appear here as users take actions.</Text>
                   </View>
                 ) : (
                   <View style={styles.card}>

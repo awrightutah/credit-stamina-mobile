@@ -286,7 +286,7 @@ const GeneratingOverlay = ({ step }) => (
       <Text style={styles.overlayTitle}>Analyzing Your Credit</Text>
       <Text style={styles.overlayStep}>{step || 'Please wait...'}</Text>
       <Text style={styles.overlayNote}>
-        Claude AI is reviewing your accounts and building a personalized action queue.
+        Credit Stamina AI is reviewing your accounts and building a personalized action queue.
       </Text>
     </View>
   </View>
@@ -413,7 +413,7 @@ const ActionsScreen = ({ navigation }) => {
         return;
       }
 
-      setStep(`Analyzing ${accounts.length} accounts with Claude AI...`);
+      setStep(`Analyzing ${accounts.length} accounts with Credit Stamina AI...`);
 
       // 2. Rule-based actions — instant, offline-capable, includes account IDs + lane data
       const ruleActions = buildRuleActions(accounts);
