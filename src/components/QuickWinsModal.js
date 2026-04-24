@@ -10,6 +10,14 @@ import {
   Alert,
 } from 'react-native';
 import { aiAPI, aiCacheAPI } from '../services/api';
+import ProgressMessage from './ProgressMessage';
+
+const QUICK_WINS_MESSAGES = [
+  'Analyzing your accounts...',
+  'Finding quick opportunities...',
+  'Calculating potential score impact...',
+  'Almost done...',
+];
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -138,7 +146,7 @@ const QuickWinsModal = ({ visible, onClose, onComplete }) => {
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={COLORS.purple} />
-              <Text style={styles.loadingText}>AI is analyzing your accounts...</Text>
+              <ProgressMessage messages={QUICK_WINS_MESSAGES} />
             </View>
           ) : error ? (
             <View style={styles.errorContainer}>

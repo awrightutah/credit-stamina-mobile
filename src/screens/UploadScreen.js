@@ -17,6 +17,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DocumentPicker from 'react-native-document-picker';
 import { creditReportsAPI, pointsAPI, runPostUploadAnalysis } from '../services/api';
 import { scheduleLocalNotification } from '../services/notifications';
+import ProgressMessage from '../components/ProgressMessage';
+
+const UPLOAD_MESSAGES = [
+  'Uploading your report...',
+  'Reading your accounts...',
+  'Detecting credit bureaus...',
+  'Analyzing account statuses...',
+  'Identifying negative items...',
+  'AI is generating your action plan...',
+  'Building your Quick Wins...',
+  'Almost ready...',
+];
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -586,10 +598,18 @@ const UploadScreen = ({ navigation }) => {
         )}
 
         {/* ── Background AI analysis progress banner ── */}
-        {!!analysisStep && (
+        {(uploading || parsing || !!analysisStep) && (
           <View style={styles.analysisBanner}>
             <ActivityIndicator size="small" color={COLORS.purple} style={{ marginRight: 8 }} />
-            <Text style={styles.analysisStepText}>{analysisStep}</Text>
+            {analysisStep ? (
+              <Text style={styles.analysisStepText}>{analysisStep}</Text>
+            ) : (
+              <ProgressMessage
+                messages={UPLOAD_MESSAGES}
+                style={styles.analysisProgress}
+                textStyle={styles.analysisStepText}
+              />
+            )}
           </View>
         )}
 
@@ -962,6 +982,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.purple + '40',
   },
   analysisStepText: { flex: 1, fontSize: 13, color: COLORS.purple, fontWeight: '500' },
+  analysisProgress: { flex: 1, marginTop: 0, paddingHorizontal: 0, alignItems: 'flex-start' },
 
   // ── Error card ──
   errorCard: {

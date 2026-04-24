@@ -15,6 +15,16 @@ import { aiAPI, accountsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AIDisclaimer from '../components/AIDisclaimer';
 import AIDisclaimerBanner from '../components/AIDisclaimerBanner';
+import ProgressMessage from '../components/ProgressMessage';
+
+const ACTION_PLAN_MESSAGES = [
+  'Analyzing your credit accounts...',
+  'Identifying negative items...',
+  'Building your 30 day action plan...',
+  'Building your 60 day action plan...',
+  'Building your 90 day action plan...',
+  'Almost done...',
+];
 
 const COLORS = {
   // Credit Stamina Brand Colors (matching PWA)
@@ -261,7 +271,7 @@ const ActionPlanScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.purple} />
-          <Text style={styles.loadingText}>Generating your personalized action plan...</Text>
+          <ProgressMessage messages={ACTION_PLAN_MESSAGES} />
         </View>
       </SafeAreaView>
     );

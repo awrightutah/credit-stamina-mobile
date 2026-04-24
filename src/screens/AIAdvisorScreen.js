@@ -18,6 +18,13 @@ import { aiAPI, accountsAPI, scoresAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AIDisclaimer from '../components/AIDisclaimer';
 import AIDisclaimerBanner from '../components/AIDisclaimerBanner';
+import ProgressMessage from '../components/ProgressMessage';
+
+const AI_ADVISOR_MESSAGES = [
+  'Thinking...',
+  'Analyzing your credit profile...',
+  'Preparing your answer...',
+];
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -295,7 +302,12 @@ const AIAdvisorScreen = () => {
           {loading && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#8B5CF6" />
-              <Text style={styles.loadingText}>Thinking...</Text>
+              <ProgressMessage
+                messages={AI_ADVISOR_MESSAGES}
+                style={styles.loadingProgress}
+                textStyle={styles.loadingText}
+                color="#8B5CF6"
+              />
             </View>
           )}
         </ScrollView>
@@ -468,6 +480,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginLeft: 8,
     fontSize: 14,
+  },
+  loadingProgress: {
+    marginTop: 0,
+    paddingHorizontal: 0,
+    alignItems: 'flex-start',
+    flexShrink: 1,
   },
   quickQuestionsContainer: {
     paddingHorizontal: 16,

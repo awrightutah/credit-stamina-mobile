@@ -21,6 +21,15 @@ import PaymentModal from '../components/PaymentModal';
 import { useAuth } from '../context/AuthContext';
 import { useESignConsent } from '../hooks/useESignConsent';
 import AIDisclaimer from '../components/AIDisclaimer';
+import ProgressMessage from '../components/ProgressMessage';
+
+const LETTER_GEN_MESSAGES = [
+  'Reviewing your account details...',
+  'Researching dispute grounds...',
+  'Writing your dispute letter...',
+  'Formatting for mailing...',
+  'Almost done...',
+];
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -335,6 +344,9 @@ const GenerateModal = ({ visible, onClose, onGenerate, accounts = [] }) => {
           </ScrollView>
 
           <View style={styles.modalFooter}>
+            {loading && (
+              <ProgressMessage messages={LETTER_GEN_MESSAGES} />
+            )}
             <TouchableOpacity
               style={[styles.generateBtn, loading && { opacity: 0.7 }]}
               onPress={handleGenerate}
