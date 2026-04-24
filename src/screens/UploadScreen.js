@@ -630,10 +630,10 @@ const UploadScreen = ({ navigation }) => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
                 <Text style={styles.resultSub}>
-                  We're analyzing your accounts in the background — this usually takes about a minute.
+                  We're analyzing your accounts in the background.
                 </Text>
                 <Text style={[styles.resultSub, { marginTop: 6 }]}>
-                  We'll send you a notification the moment your action plan is ready.
+                  Check back in about a minute and your accounts will be ready to view.
                 </Text>
               </View>
             </View>
