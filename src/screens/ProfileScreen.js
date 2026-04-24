@@ -236,7 +236,7 @@ const ProfileScreen = () => {
   const handleCancelSubscription = () => {
     Alert.alert(
       'Cancel Subscription?',
-      'You\'ll keep full access to all Credit Stamina features — AI analysis, dispute letters, score tracking, and family sharing — until your current billing period ends.\n\nAfter that date your account will revert to the free plan and these features will no longer be available.',
+      'You\'ll keep full access to all Credit Stamina features — AI analysis, dispute letters, and score tracking — until your current billing period ends.\n\nAfter that date your account will revert to the free plan and these features will no longer be available.',
       [
         { text: 'Keep My Subscription', style: 'cancel' },
         {
@@ -299,7 +299,7 @@ const ProfileScreen = () => {
   const PRO_FEATURES = [
     'Unlimited dispute letters',
     'AI-powered credit analysis',
-    '2 household users included',
+    'Personalized 30/60/90 day plan',
     'Priority support',
   ];
 
@@ -441,12 +441,9 @@ const ProfileScreen = () => {
 
         {/* Account */}
         <SectionCard title="ACCOUNT">
-          <MenuItem
-            icon="👨‍👩‍👧"
-            title="Family Plan"
-            subtitle="Invite a family member · 2 seats included"
-            onPress={() => navigation.navigate('Family')}
-          />
+          {/* Family Plan temporarily hidden until the invite/accept flow is fully wired.
+              Backend routes (/api/household/*) and FamilyScreen.js are left in place
+              for a later release so we don't lose the groundwork. */}
           <MenuItem
             icon="✏️"
             title="Edit Profile"
