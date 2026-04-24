@@ -765,11 +765,12 @@ export const billingAPI = {
     });
   },
 
-  // Subscribe via /api/create-checkout (matches PWA endpoint)
+  // Subscribe via /api/mobile/subscribe — Authorize.net ARB created server-side.
+  // Amount is resolved from profiles.promo_price on the backend, NOT from the
+  // client, so the beta $9.99 lock is tamper-resistant. Stripe is not involved.
   subscribe: async ({ planId, cardData, savedProfileId }) => {
-    return api.post('/api/create-checkout', {
-      plan: planId ?? 'Monthly',
-      amount: 24.99,
+    return api.post('/api/mobile/subscribe', {
+      planId: planId ?? 'Monthly',
       ...(savedProfileId
         ? { saved_payment_profile_id: savedProfileId }
         : {
