@@ -926,10 +926,11 @@ export const activityAPI = {
     return api.get('/api/activity-timeline');
   },
   getAll: async () => {
-    // Try Railway API first, fall back to Supabase activity_log directly
+    // Backend returns { events, total }; unwrap to a flat array for callers.
     try {
       const res = await api.get('/api/activity-timeline');
-      if (Array.isArray(res?.data) && res.data.length > 0) return res;
+      const events = res?.data?.events ?? res?.data;
+      if (Array.isArray(events) && events.length > 0) return { data: events };
     } catch {}
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData?.session?.user?.id;
