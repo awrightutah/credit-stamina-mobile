@@ -18,7 +18,9 @@ import { useNavigation } from '@react-navigation/native';
 import { lettersAPI, accountsAPI, logActivity, pointsAPI } from '../services/api';
 import { scheduleLetterReminder, cancelLetterReminder } from '../services/notifications';
 import PaymentModal from '../components/PaymentModal';
+import ProUpgradePrompt from '../components/ProUpgradePrompt';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { useESignConsent } from '../hooks/useESignConsent';
 import AIDisclaimer from '../components/AIDisclaimer';
 import ProgressMessage from '../components/ProgressMessage';
@@ -985,6 +987,16 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const LettersScreen = ({ route }) => {
   const { user } = useAuth();
+  const { subscription } = useSubscription();
+  const isPaid = subscription?.is_active === true;
+  const [upgradePromptVisible, setUpgradePromptVisible] = useState(false);
+
+  // Free/trial users hit the ProUpgradePrompt instead of opening the
+  // generate-letter compose modal.
+  const handleNewLetterTap = () => {
+    if (isPaid) setGenerateVisible(true);
+    else setUpgradePromptVisible(true);
+  };
   const [letters, setLetters]       = useState([]);
   const [accounts, setAccounts]     = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -1110,7 +1122,7 @@ const LettersScreen = ({ route }) => {
           <Text style={styles.title}>Dispute Letters</Text>
           <Text style={styles.subtitle}>{letters.length} letters total</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setGenerateVisible(true)}>
+        <TouchableOpacity style={styles.addBtn} onPress={handleNewLetterTap}>
           <Text style={styles.addBtnText}>+ New</Text>
         </TouchableOpacity>
       </View>
@@ -1182,7 +1194,7 @@ const LettersScreen = ({ route }) => {
                       : 'No letters of this type found.'}
                   </Text>
                   {activeTab === 'all' && (
-                    <TouchableOpacity style={styles.generateBtnEmpty} onPress={() => setGenerateVisible(true)}>
+                    <TouchableOpacity style={styles.generateBtnEmpty} onPress={handleNewLetterTap}>
                       <Text style={styles.generateBtnText}>Generate First Letter</Text>
                     </TouchableOpacity>
                   )}
@@ -1194,6 +1206,10 @@ const LettersScreen = ({ route }) => {
       )}
 
       {/* Modals */}
+      <ProUpgradePrompt
+        visible={upgradePromptVisible}
+        onClose={() => setUpgradePromptVisible(false)}
+      />
       <GenerateModal
         visible={generateVisible}
         onClose={() => setGenerateVisible(false)}

@@ -95,7 +95,7 @@ const SectionCard = ({ title, children }) => (
 );
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
-const ProfileScreen = () => {
+const ProfileScreen = ({ route }) => {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
   const { subscription, refreshSubscription } = useSubscription();
@@ -122,6 +122,16 @@ const ProfileScreen = () => {
       if (user?.id) refreshSubscription();
     }, [user?.id, refreshSubscription])
   );
+
+  // Deep-link: navigation.navigate('MainTabs', { screen: 'Profile', params: { openUpgrade: true } })
+  // from UpgradeBanner / ProUpgradePrompt opens the Subscribe modal here.
+  // Consume the param once so re-renders don't re-trigger.
+  useEffect(() => {
+    if (route?.params?.openUpgrade) {
+      setUpgradeVisible(true);
+      navigation.setParams?.({ openUpgrade: undefined });
+    }
+  }, [route?.params?.openUpgrade]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchUserData = async () => {
     try {

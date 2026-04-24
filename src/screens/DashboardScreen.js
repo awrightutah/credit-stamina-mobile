@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, budgetAPI, authAPI } from '../services/api';
 import QuickWinsModal from '../components/QuickWinsModal';
+import UpgradeBanner from '../components/UpgradeBanner';
 import COLORS from '../theme/colors';
 
 const { width } = Dimensions.get('window');
@@ -197,6 +198,9 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         </View>
       </View>
+
+      {/* Inline upgrade card — only renders for free/trial users; respects 3-day dismiss */}
+      <UpgradeBanner />
 
       {/* ── Credit Score Card ────────────────────────────────────────────── */}
       <TouchableOpacity style={styles.scoreCard} onPress={() => navigation.navigate('Score')} activeOpacity={0.85}>
