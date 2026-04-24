@@ -14,8 +14,9 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { supabase } from '../../services/supabase';
-import { statesAPI } from '../../services/api';
+import { statesAPI, promoAPI } from '../../services/api';
 import { friendlyAuthError } from '../../utils/authErrors';
+import { BETA_BUILD, BETA_PROMO_CODE } from '../../config/env';
 
 const formatPhone = (raw) => {
   const d = raw.replace(/\D/g, '').slice(0, 10);
@@ -117,9 +118,12 @@ const RegisterScreen = ({ navigation }) => {
       // so a Supabase outage doesn't block all signups
     }
 
-    // Validate promo code if provided
+    // On beta builds, the promo input is hidden and BETALAUNCH2026 is
+    // auto-applied server-side AFTER signup succeeds (so we have an authed
+    // session). We skip the manual pre-validation entirely in that case.
+    // For public builds, the optional user-entered code is validated here.
     let promoData = null;
-    if (promoCode.trim()) {
+    if (!BETA_BUILD && promoCode.trim()) {
       const { data: promo, error: promoErr } = await supabase
         .from('promo_codes')
         .select('id, price, uses_count, max_uses, is_active')
@@ -154,8 +158,23 @@ const RegisterScreen = ({ navigation }) => {
         },
       });
 
-      // Apply promo to profile if a valid code was provided
-      if (promoData) {
+      // Auto-apply the beta promo on TestFlight builds. Server-side so the
+      // price is locked in a tamper-resistant way on profiles.promo_price.
+      // Non-fatal: a failed apply doesn't block signup — we just log it.
+      if (BETA_BUILD) {
+        try {
+          const res = await promoAPI.apply(BETA_PROMO_CODE);
+          const applied = res?.data;
+          if (applied?.ok) {
+            console.log('[Register] Beta rate locked in:', applied.price);
+          } else {
+            console.warn('[Register] Beta promo apply returned no-ok:', applied);
+          }
+        } catch (e) {
+          console.warn('[Register] Beta promo apply failed (non-blocking):', e?.response?.data?.error || e?.message);
+        }
+      } else if (promoData) {
+        // Public build, manual promo code path — same upsert flow as before.
         const userId = data?.user?.id;
         if (userId) {
           await supabase.from('profiles').upsert({
@@ -164,7 +183,6 @@ const RegisterScreen = ({ navigation }) => {
             is_test_user: true,
             promo_code_id: promoData.id,
           }, { onConflict: 'id' }).catch(() => null);
-          // Increment uses_count (non-critical)
           await supabase.from('promo_codes')
             .update({ uses_count: (promoData.uses_count ?? 0) + 1 })
             .eq('id', promoData.id)
@@ -398,22 +416,26 @@ const RegisterScreen = ({ navigation }) => {
           </View>
         </Field>
 
-        {/* ── Promo Code (optional) ── */}
-        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>PROMO CODE</Text>
-        <Field label="Promo Code (Optional)">
-          <TextInput
-            ref={promoRef}
-            style={styles.input}
-            placeholder="Enter code if you have one"
-            placeholderTextColor={COLORS.textSecondary}
-            value={promoCode}
-            onChangeText={setPromoCode}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            returnKeyType="done"
-            onSubmitEditing={handleRegister}
-          />
-        </Field>
+        {/* ── Promo Code (hidden on beta builds — BETALAUNCH2026 is auto-applied) ── */}
+        {!BETA_BUILD && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 8 }]}>PROMO CODE</Text>
+            <Field label="Promo Code (Optional)">
+              <TextInput
+                ref={promoRef}
+                style={styles.input}
+                placeholder="Enter code if you have one"
+                placeholderTextColor={COLORS.textSecondary}
+                value={promoCode}
+                onChangeText={setPromoCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleRegister}
+              />
+            </Field>
+          </>
+        )}
 
         {/* ── CROA Required Disclosure ── */}
         <View style={styles.croaBox}>
@@ -442,6 +464,18 @@ const RegisterScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Beta Tester banner (TestFlight only) ── */}
+        {BETA_BUILD && (
+          <View style={styles.betaBanner}>
+            <Text style={styles.betaBannerEmoji}>🚀</Text>
+            <Text style={styles.betaBannerTitle}>You're joining as a Beta Tester!</Text>
+            <Text style={styles.betaBannerPrice}>$9.99 / month — locked in for life</Text>
+            <Text style={styles.betaBannerBody}>
+              This price will never increase for your account. Thanks for helping us build something great.
+            </Text>
+          </View>
+        )}
 
         {/* Submit */}
         <TouchableOpacity
@@ -586,6 +620,37 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 12,
     marginBottom: 4,
+  },
+  betaBanner: {
+    marginTop: 14,
+    marginBottom: 6,
+    padding: 18,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.45)',
+    alignItems: 'center',
+  },
+  betaBannerEmoji: { fontSize: 28, marginBottom: 6 },
+  betaBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.success,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  betaBannerPrice: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  betaBannerBody: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   croaTitle: {
     fontSize: 11,

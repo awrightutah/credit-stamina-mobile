@@ -354,8 +354,11 @@ const ProfileScreen = () => {
                 <Text style={styles.subPlanLabel}>ACTIVE SUBSCRIPTION</Text>
                 <Text style={styles.subPlanName}>{planLabel}</Text>
                 <Text style={styles.subPlanPrice}>
-                  ${displayPrice.toFixed(2)} / month{isTestUser ? ' · Test User Rate' : ''}
+                  ${displayPrice.toFixed(2)} / month{isTestUser ? ' · Beta Tester Rate' : ''}
                 </Text>
+                {isTestUser && (
+                  <Text style={styles.subLockedBadge}>🔒 Locked in for life</Text>
+                )}
               </View>
               <View style={styles.subActiveBadge}>
                 <Text style={styles.subActiveBadgeText}>✓ Active</Text>
@@ -671,6 +674,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  subLockedBadge: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.success,
+    letterSpacing: 0.3,
   },
   subActiveBadge: {
     backgroundColor: COLORS.success + '20',

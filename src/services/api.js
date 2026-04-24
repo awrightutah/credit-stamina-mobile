@@ -683,6 +683,20 @@ const getSubscriptionFromSupabase = async () => {
   }
 };
 
+// ============================================
+// PROMO CODES
+// ============================================
+
+export const promoAPI = {
+  // Apply a promo code to the signed-in user. Server-side: validates the
+  // code, decrements uses_count, writes promo_price + promo_code_id onto the
+  // profile so subsequent billing reads can't be tampered with.
+  // Returns { ok, code, price, original_price, locked }.
+  apply: async (code) => {
+    return api.post('/api/promo/apply', { code });
+  },
+};
+
 export const billingAPI = {
   // GET /api/subscription — primary endpoint (same one the PWA uses)
   // Falls back to Supabase profiles table if Railway returns no usable data
