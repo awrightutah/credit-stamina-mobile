@@ -640,6 +640,7 @@ const normalizeSubscriptionResponse = (raw) => {
   if (!raw) return null;
   const override = raw.subscription_override?.toLowerCase()?.trim() ?? '';
   const isActive = raw.is_active === true || override === 'paid' || override === 'active';
+  const promoPrice = raw.promo_price != null ? parseFloat(raw.promo_price) : null;
   return {
     is_active:    isActive,
     status:       isActive ? 'active' : (raw.status ?? 'free'),
@@ -649,6 +650,8 @@ const normalizeSubscriptionResponse = (raw) => {
     trial_expired:   raw.trial_expired   ?? false,
     can_use_letters: raw.can_use_letters ?? isActive,
     subscription_override: override,
+    promo_price:     Number.isFinite(promoPrice) ? promoPrice : null,
+    is_test_user:    raw.is_test_user ?? false,
   };
 };
 

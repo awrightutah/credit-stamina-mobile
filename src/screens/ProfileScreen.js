@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { pointsAPI, billingAPI, smsAPI, notificationsAPI, adminAPI, POINTS_GOAL } from '../services/api';
@@ -111,6 +111,17 @@ const ProfileScreen = () => {
   useEffect(() => {
     if (user?.id) fetchUserData();
   }, [user?.id]);
+
+  // Refresh subscription (and therefore promo_price) every time the screen
+  // comes into focus. Covers the post-registration race where promoAPI.apply
+  // finishes after SubscriptionContext's initial fetch has already run, plus
+  // any later navigation back into Profile after cancel/pause/upgrade flows
+  // in other screens.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) refreshSubscription();
+    }, [user?.id, refreshSubscription])
+  );
 
   const fetchUserData = async () => {
     try {

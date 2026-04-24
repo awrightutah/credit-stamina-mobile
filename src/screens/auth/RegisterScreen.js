@@ -12,6 +12,7 @@ import {
   Linking,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { supabase } from '../../services/supabase';
 import { statesAPI, promoAPI } from '../../services/api';
@@ -47,6 +48,7 @@ const Field = ({ label, children }) => (
 
 const RegisterScreen = ({ navigation }) => {
   const { register } = useAuth();
+  const { refreshSubscription } = useSubscription();
 
   // Personal info
   const [fullName, setFullName]       = useState('');
@@ -172,6 +174,16 @@ const RegisterScreen = ({ navigation }) => {
           }
         } catch (e) {
           console.warn('[Register] Beta promo apply failed (non-blocking):', e?.response?.data?.error || e?.message);
+        }
+        // Pull the fresh subscription into the shared context so whichever
+        // screen the user lands on next (Profile, Dashboard) sees $9.99, not
+        // the stale $24.99 from the context's initial fetch. Non-blocking:
+        // a transient failure falls back to the useFocusEffect refresh on
+        // ProfileScreen.
+        try {
+          await refreshSubscription();
+        } catch (e) {
+          console.warn('[Register] subscription refresh failed (non-blocking):', e?.message);
         }
       } else if (promoData) {
         // Public build, manual promo code path — same upsert flow as before.
