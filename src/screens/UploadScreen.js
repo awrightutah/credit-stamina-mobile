@@ -30,6 +30,30 @@ const UPLOAD_MESSAGES = [
   'Almost ready...',
 ];
 
+const POLL_INTERVAL_MS = 5000;
+const POLL_TIMEOUT_MS  = 3 * 60 * 1000; // 3 minutes hard stop
+
+// Poll /api/upload-status/:id until status settles to complete/error or we
+// hit the hard timeout. onStep receives the server's current message string
+// so the UI can show real backend progress when available.
+const pollUploadStatus = async (uploadId, onStep) => {
+  const start = Date.now();
+  while (Date.now() - start < POLL_TIMEOUT_MS) {
+    try {
+      const res = await creditReportsAPI.getUploadStatus(uploadId);
+      const payload = res?.data || {};
+      if (onStep && payload.message) onStep(payload.message);
+      if (payload.status === 'complete' || payload.status === 'error') {
+        return payload;
+      }
+    } catch (e) {
+      console.warn('[Upload] poll error:', e?.message);
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  return { status: 'timeout' };
+};
+
 const COLORS = {
   staminaBlue: '#1E40AF',
   powerPurple: '#7C3AED',
@@ -321,25 +345,41 @@ const UploadScreen = ({ navigation }) => {
         setUploadProgress(progress);
       });
 
+      // Backend returns 202 { uploadId, status: 'processing' } — now poll for results.
+      const uploadId =
+        response?.data?.uploadId ||
+        response?.data?.id ||
+        response?.data?.report_id ||
+        null;
+
+      if (!uploadId) {
+        setUploading(false);
+        setParsing(false);
+        setError('Upload accepted but no upload ID returned. Please try again.');
+        return;
+      }
+
+      // Keep the "parsing" state on while polling — this is what drives the
+      // ProgressMessage banner in the UI.
+      setUploading(false);
+      setParsing(true);
+
+      const pollResult = await pollUploadStatus(uploadId, (step) => setAnalysisStep(step));
       setParsing(false);
+      setAnalysisStep('');
 
-      if (response.data) {
-        const uploadId  = response.data.id || response.data.report_id || null;
-        const accounts  = response.data.accounts || [];
-        const scores    = response.data.scores   || [];
-
+      if (pollResult.status === 'complete') {
+        const accounts = pollResult.data?.accounts || [];
         setResult({
           success: true,
-          accountsFound: accounts.length,
-          bureau: response.data.bureau,
+          accountsFound: pollResult.data?.accounts_extracted ?? accounts.length,
+          bureau: pollResult.data?.bureau,
           accounts,
         });
         pointsAPI.award('upload_report', 'Uploaded credit report', 50).catch(() => null);
         loadHistory();
 
-        // Kick off one comprehensive AI analysis — action queue + quick wins + score tips
-        // Runs in the background; progress shown via setAnalysisStep
-        runPostUploadAnalysis(uploadId, accounts, scores, (step) => setAnalysisStep(step))
+        runPostUploadAnalysis(uploadId, accounts, [], (step) => setAnalysisStep(step))
           .catch((e) => console.warn('[Upload] post-upload analysis error:', e?.message))
           .finally(() => setAnalysisStep(''));
 
@@ -353,10 +393,16 @@ const UploadScreen = ({ navigation }) => {
             ]
           );
         }, 500);
+      } else if (pollResult.status === 'error') {
+        setError(pollResult.error || 'Upload processing failed. Please try again.');
+        setIsParseError(/parse|extract|read|format/i.test(pollResult.error || ''));
+      } else {
+        setError('Upload is taking longer than expected. It will keep processing — check back in a minute.');
       }
     } catch (err) {
       setUploading(false);
       setParsing(false);
+      setAnalysisStep('');
       const msg = err?.response?.data?.error || err?.message || 'Upload failed';
       // Detect parse failures
       const isParseFailure =

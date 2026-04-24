@@ -220,7 +220,9 @@ export const creditReportsAPI = {
     return api.delete(`/api/credit-reports/${id}`);
   },
   
-  // Upload and parse credit report PDF with AI
+  // Upload and parse credit report PDF with AI.
+  // Backend returns 202 { uploadId } immediately and processes in the
+  // background; callers must poll getUploadStatus(uploadId) for results.
   upload: async (formData, onProgress) => {
     const config = {
       timeout: 120000,
@@ -237,6 +239,12 @@ export const creditReportsAPI = {
       },
     };
     return api.post('/api/upload-pdf', formData, config);
+  },
+
+  // Poll background upload status; resolves with
+  // { status: 'processing' | 'complete' | 'error', progress, message, data, error }
+  getUploadStatus: async (uploadId) => {
+    return api.get(`/api/upload-status/${uploadId}`);
   },
 };
 
