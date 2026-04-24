@@ -30,30 +30,6 @@ const UPLOAD_MESSAGES = [
   'Almost ready...',
 ];
 
-const POLL_INTERVAL_MS = 5000;
-const POLL_TIMEOUT_MS  = 3 * 60 * 1000; // 3 minutes hard stop
-
-// Poll /api/upload-status/:id until status settles to complete/error or we
-// hit the hard timeout. onStep receives the server's current message string
-// so the UI can show real backend progress when available.
-const pollUploadStatus = async (uploadId, onStep) => {
-  const start = Date.now();
-  while (Date.now() - start < POLL_TIMEOUT_MS) {
-    try {
-      const res = await creditReportsAPI.getUploadStatus(uploadId);
-      const payload = res?.data || {};
-      if (onStep && payload.message) onStep(payload.message);
-      if (payload.status === 'complete' || payload.status === 'error') {
-        return payload;
-      }
-    } catch (e) {
-      console.warn('[Upload] poll error:', e?.message);
-    }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-  }
-  return { status: 'timeout' };
-};
-
 const COLORS = {
   staminaBlue: '#1E40AF',
   powerPurple: '#7C3AED',
@@ -345,7 +321,11 @@ const UploadScreen = ({ navigation }) => {
         setUploadProgress(progress);
       });
 
-      // Backend returns 202 { uploadId, status: 'processing' } — now poll for results.
+      // Backend returns 202 { uploadId, status: 'processing' } — server is
+      // analyzing in the background. We do NOT poll the user's screen any
+      // more; the on-focus refresh in AccountsScreen / DashboardScreen /
+      // ActionsScreen / ScoreScreen + a push notification when processing
+      // completes is the new mechanism. Free the UI immediately.
       const uploadId =
         response?.data?.uploadId ||
         response?.data?.id ||
@@ -355,50 +335,33 @@ const UploadScreen = ({ navigation }) => {
       if (!uploadId) {
         setUploading(false);
         setParsing(false);
-        setError('Upload accepted but no upload ID returned. Please try again.');
+        setError('Upload accepted but no upload ID was returned. Please try again.');
         return;
       }
 
-      // Keep the "parsing" state on while polling — this is what drives the
-      // ProgressMessage banner in the UI.
       setUploading(false);
-      setParsing(true);
-
-      const pollResult = await pollUploadStatus(uploadId, (step) => setAnalysisStep(step));
       setParsing(false);
       setAnalysisStep('');
 
-      if (pollResult.status === 'complete') {
-        const accounts = pollResult.data?.accounts || [];
-        setResult({
-          success: true,
-          accountsFound: pollResult.data?.accounts_extracted ?? accounts.length,
-          bureau: pollResult.data?.bureau,
-          accounts,
-        });
-        pointsAPI.award('upload_report', 'Uploaded credit report', 50).catch(() => null);
-        loadHistory();
+      // Award upload points right away (idempotent on the points side).
+      pointsAPI.award('upload_report', 'Uploaded credit report', 50).catch(() => null);
+      loadHistory();
 
-        runPostUploadAnalysis(uploadId, accounts, [], (step) => setAnalysisStep(step))
-          .catch((e) => console.warn('[Upload] post-upload analysis error:', e?.message))
-          .finally(() => setAnalysisStep(''));
+      // Warm the AI caches in the background so Action Plan / Quick Wins /
+      // Score Tips screens load instantly on first view. Pure fire-and-forget;
+      // user is no longer waiting on it. Failures are non-blocking — the
+      // screens will fall back to fetching live when opened.
+      runPostUploadAnalysis(uploadId, [], [], () => {})
+        .catch((e) => console.warn('[Upload] post-upload analysis warmup error:', e?.message));
 
-        setTimeout(() => {
-          Alert.alert(
-            'Upload Complete!',
-            `Found ${accounts.length} accounts. Your AI action plan is being prepared in the background.`,
-            [
-              { text: 'Stay Here', style: 'cancel' },
-              { text: 'View Accounts', onPress: () => navigation.navigate('Accounts') },
-            ]
-          );
-        }, 500);
-      } else if (pollResult.status === 'error') {
-        setError(pollResult.error || 'Upload processing failed. Please try again.');
-        setIsParseError(/parse|extract|read|format/i.test(pollResult.error || ''));
-      } else {
-        setError('Upload is taking longer than expected. It will keep processing — check back in a minute.');
-      }
+      // Show the success card. We don't have an account count yet — that's
+      // populated in the background — so the copy is forward-looking.
+      setResult({
+        success: true,
+        uploadId,
+        bureau: selectedBureau,
+        backgroundProcessing: true,
+      });
     } catch (err) {
       setUploading(false);
       setParsing(false);
@@ -664,41 +627,32 @@ const UploadScreen = ({ navigation }) => {
           <View style={styles.resultCard}>
             <View style={styles.resultHeader}>
               <Text style={styles.resultIcon}>✅</Text>
-              <View>
-                <Text style={styles.resultTitle}>Upload Complete!</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
                 <Text style={styles.resultSub}>
-                  {result.accountsFound} account{result.accountsFound !== 1 ? 's' : ''} extracted from {result.bureau}
+                  We're analyzing your accounts in the background — this usually takes about a minute.
+                </Text>
+                <Text style={[styles.resultSub, { marginTop: 6 }]}>
+                  We'll send you a notification the moment your action plan is ready.
                 </Text>
               </View>
             </View>
-            {result.accounts.length > 0 && (
-              <View style={styles.resultAccounts}>
-                {result.accounts.slice(0, 5).map((acct, i) => {
-                  const laneColors = {
-                    'Active Damage': COLORS.danger,
-                    Removable:       COLORS.warning,
-                    'Aging/Monitor': COLORS.textSecondary,
-                    Positive:        COLORS.success,
-                  };
-                  const c = laneColors[acct.lane] ?? COLORS.textSecondary;
-                  return (
-                    <View
-                      key={acct.id ?? `a-${i}`}
-                      style={[styles.resultAcctRow, i < Math.min(result.accounts.length, 5) - 1 && styles.resultAcctBorder]}
-                    >
-                      <View style={[styles.resultDot, { backgroundColor: c }]} />
-                      <Text style={styles.resultAcctName} numberOfLines={1}>
-                        {acct.creditor || acct.account_name || 'Unknown'}
-                      </Text>
-                      {acct.lane && <Text style={[styles.resultLaneTag, { color: c }]}>{acct.lane}</Text>}
-                    </View>
-                  );
-                })}
-                {result.accounts.length > 5 && (
-                  <Text style={styles.resultMore}>+{result.accounts.length - 5} more — view in Accounts</Text>
-                )}
-              </View>
-            )}
+            <View style={styles.resultActions}>
+              <TouchableOpacity
+                style={[styles.resultBtn, styles.resultBtnPrimary]}
+                onPress={() => navigation.navigate('Accounts')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.resultBtnPrimaryText}>View Accounts</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.resultBtn, styles.resultBtnSecondary]}
+                onPress={() => navigation.navigate('Dashboard')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.resultBtnSecondaryText}>Continue to App</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1072,6 +1026,18 @@ const styles = StyleSheet.create({
   resultAcctName:   { flex: 1, fontSize: 13, color: COLORS.text, fontWeight: '500' },
   resultLaneTag:    { fontSize: 11, fontWeight: '600' },
   resultMore:       { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', paddingVertical: 6 },
+  resultActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 16,
+  },
+  resultBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  resultBtnPrimary: { backgroundColor: COLORS.success },
+  resultBtnPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  resultBtnSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.success + '60' },
+  resultBtnSecondaryText: { color: COLORS.success, fontSize: 14, fontWeight: '600' },
 
   // ── Weekly reminder ──
   reminderCard: {

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { actionsAPI, accountsAPI, aiAPI, aiCacheAPI, pointsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -385,6 +386,14 @@ const ActionsScreen = ({ navigation }) => {
   useEffect(() => {
     if (user?.id) loadActions();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload on every focus so post-upload background processing or
+  // push-notification deep links always surface current data.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) loadActions();
+    }, [user?.id, loadActions])
+  );
 
   // Pull-to-refresh only reads from Supabase — never triggers AI generation
   const onRefresh = useCallback(() => {

@@ -14,6 +14,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { accountsAPI, notesAPI, actionsAPI } from '../services/api';
 
 const ACCOUNT_TYPES = ['Credit Card', 'Collection', 'Auto Loan', 'Medical', 'Student Loan', 'Mortgage', 'Personal Loan', 'Charge-Off', 'Other'];
@@ -396,6 +397,15 @@ const AccountsScreen = ({ navigation }) => {
       fetchAccounts();
     }
   }, [user?.id]);
+
+  // Reload accounts every time the screen gains focus so background-processed
+  // uploads, push-notification deep links, and tab switches always show fresh
+  // data without the user pulling to refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) fetchAccounts();
+    }, [user?.id])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

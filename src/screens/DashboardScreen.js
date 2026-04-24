@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { accountsAPI, actionsAPI, scoresAPI, pointsAPI, budgetAPI, authAPI } from '../services/api';
 import QuickWinsModal from '../components/QuickWinsModal';
@@ -127,6 +128,14 @@ const DashboardScreen = ({ navigation }) => {
   useEffect(() => {
     if (user?.id) fetchData();
   }, [user?.id]);
+
+  // Refresh on focus so post-upload background processing, push-notification
+  // deep links, and tab switches always show current data.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) fetchData();
+    }, [user?.id, fetchData])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
