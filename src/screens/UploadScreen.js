@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Platform,
   Linking,
   Switch,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +31,62 @@ const UPLOAD_MESSAGES = [
   'Building your Quick Wins...',
   'Almost ready...',
 ];
+
+// Messages cycled in the success card while the backend processes the report.
+// First item interpolates the bureau name dynamically (see usage).
+const PROCESSING_MESSAGES = (bureau) => [
+  `Reading your ${bureau || 'credit'} report...`,
+  'Identifying your accounts...',
+  'Detecting negative items...',
+  'Categorizing active damage...',
+  'Finding removable collections...',
+  'Analyzing account ages...',
+  'Building your action plan...',
+  'Calculating score impact...',
+  'Almost ready...',
+];
+
+const POLL_INTERVAL_MS = 5000;
+const POLL_TIMEOUT_MS  = 3 * 60 * 1000;
+
+// iMessage-style three-dot pulsing indicator. Each dot loops with a staggered
+// delay so the pulse travels left-to-right. useNativeDriver keeps it smooth.
+const TypingDots = ({ color = '#64748B' }) => {
+  const dots = [useRef(new Animated.Value(0.35)).current,
+                useRef(new Animated.Value(0.35)).current,
+                useRef(new Animated.Value(0.35)).current];
+  useEffect(() => {
+    const animations = dots.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 180),
+          Animated.timing(v, { toValue: 1, duration: 400, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
+          Animated.timing(v, { toValue: 0.35, duration: 400, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
+          Animated.delay((2 - i) * 180),
+        ])
+      )
+    );
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, marginTop: 10 }}>
+      {dots.map((v, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: color,
+            opacity: v,
+            transform: [{ scale: v.interpolate({ inputRange: [0.35, 1], outputRange: [0.8, 1.1] }) }],
+          }}
+        />
+      ))}
+    </View>
+  );
+};
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -148,6 +206,69 @@ const UploadScreen = ({ navigation }) => {
   const [error, setError]                   = useState(null);
   const [isParseError, setIsParseError]     = useState(false);
   const [analysisStep, setAnalysisStep]     = useState(''); // post-upload AI analysis progress
+
+  // Polling lifecycle — see startStatusPolling below. Refs so the helper can
+  // close over them without causing stale-closure bugs across re-renders.
+  const pollIntervalRef = useRef(null);
+  const pollDeadlineRef = useRef(0);
+
+  const stopStatusPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Clean up the polling interval on unmount so navigating away doesn't leave
+  // network requests running in the background.
+  useEffect(() => () => stopStatusPolling(), [stopStatusPolling]);
+
+  // Non-blocking poll of /api/upload-status/:id. Updates `result` in place
+  // when status flips to complete/error/timeout. Buttons stay active the whole
+  // time — this is purely to update the success card's subtitle + summary.
+  const startStatusPolling = useCallback((uploadId) => {
+    if (!uploadId) return;
+    stopStatusPolling();
+    pollDeadlineRef.current = Date.now() + POLL_TIMEOUT_MS;
+
+    const tick = async () => {
+      if (Date.now() > pollDeadlineRef.current) {
+        stopStatusPolling();
+        setResult((prev) => prev ? { ...prev, processingState: 'timeout' } : prev);
+        return;
+      }
+      try {
+        const res = await creditReportsAPI.getUploadStatus(uploadId);
+        const payload = res?.data || {};
+        if (payload.status === 'complete') {
+          stopStatusPolling();
+          const d = payload.data || {};
+          setResult((prev) => prev ? {
+            ...prev,
+            processingState: 'complete',
+            accountsFound:       d.accounts_extracted ?? 0,
+            activeDamageCount:   d.active_damage_count ?? 0,
+            removableCount:      d.removable_count ?? 0,
+            agingMonitorCount:   d.aging_monitor_count ?? 0,
+          } : prev);
+        } else if (payload.status === 'error') {
+          stopStatusPolling();
+          setResult((prev) => prev ? {
+            ...prev,
+            processingState: 'error',
+            errorMessage: payload.error || 'Processing failed. Please try uploading again.',
+          } : prev);
+        }
+      } catch (e) {
+        // Network hiccup — keep polling until the deadline.
+        console.warn('[Upload] poll error:', e?.message);
+      }
+    };
+
+    // Fire once immediately so short backends settle fast, then every 5s.
+    tick();
+    pollIntervalRef.current = setInterval(tick, POLL_INTERVAL_MS);
+  }, [stopStatusPolling]);
 
   const [reports, setReports]               = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -354,14 +475,17 @@ const UploadScreen = ({ navigation }) => {
       runPostUploadAnalysis(uploadId, [], [], () => {})
         .catch((e) => console.warn('[Upload] post-upload analysis warmup error:', e?.message));
 
-      // Show the success card. We don't have an account count yet — that's
-      // populated in the background — so the copy is forward-looking.
+      // Show the success card. Processing state + lane counts come in later
+      // via startStatusPolling — buttons are active the whole time, so the
+      // user can navigate away without waiting.
       setResult({
         success: true,
         uploadId,
         bureau: selectedBureau,
-        backgroundProcessing: true,
+        processingState: 'processing',
       });
+
+      startStatusPolling(uploadId);
     } catch (err) {
       setUploading(false);
       setParsing(false);
@@ -636,13 +760,63 @@ const UploadScreen = ({ navigation }) => {
             <View style={styles.resultHeader}>
               <Text style={styles.resultIcon}>✅</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
-                <Text style={styles.resultSub}>
-                  We're analyzing your accounts in the background.
-                </Text>
-                <Text style={[styles.resultSub, { marginTop: 6 }]}>
-                  Check back in a few minutes and your accounts will be ready to view.
-                </Text>
+                {result.processingState === 'complete' ? (
+                  <>
+                    <Text style={styles.resultTitle}>Your analysis is ready!</Text>
+                    <Text style={styles.resultSub}>
+                      Found {result.accountsFound ?? 0} account{result.accountsFound === 1 ? '' : 's'}{result.bureau ? ` on your ${result.bureau} report` : ''}.
+                    </Text>
+                    <View style={styles.laneBreakdown}>
+                      <View style={styles.laneRow}>
+                        <View style={[styles.laneDot, { backgroundColor: COLORS.danger }]} />
+                        <Text style={[styles.laneCount, { color: COLORS.danger }]}>
+                          {result.activeDamageCount ?? 0}
+                        </Text>
+                        <Text style={styles.laneLabel}>need immediate attention</Text>
+                      </View>
+                      <View style={styles.laneRow}>
+                        <View style={[styles.laneDot, { backgroundColor: COLORS.warning }]} />
+                        <Text style={[styles.laneCount, { color: COLORS.warning }]}>
+                          {result.removableCount ?? 0}
+                        </Text>
+                        <Text style={styles.laneLabel}>can be disputed</Text>
+                      </View>
+                      <View style={styles.laneRow}>
+                        <View style={[styles.laneDot, { backgroundColor: COLORS.textSecondary }]} />
+                        <Text style={[styles.laneCount, { color: COLORS.textSecondary }]}>
+                          {result.agingMonitorCount ?? 0}
+                        </Text>
+                        <Text style={styles.laneLabel}>to monitor</Text>
+                      </View>
+                    </View>
+                  </>
+                ) : result.processingState === 'timeout' ? (
+                  <>
+                    <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
+                    <Text style={styles.resultSub}>
+                      Your accounts will be ready shortly — check back in a minute.
+                    </Text>
+                  </>
+                ) : result.processingState === 'error' ? (
+                  <>
+                    <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
+                    <Text style={styles.resultSub}>
+                      {result.errorMessage || 'We hit a snag analyzing your report. Please try again.'}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
+                    <ProgressMessage
+                      messages={PROCESSING_MESSAGES(result.bureau)}
+                      interval={3000}
+                      color={COLORS.textSecondary}
+                      style={styles.processingMessage}
+                      textStyle={styles.processingMessageText}
+                    />
+                    <TypingDots color={COLORS.textSecondary} />
+                  </>
+                )}
               </View>
             </View>
             <View style={styles.resultActions}>
@@ -1068,6 +1242,13 @@ const styles = StyleSheet.create({
   resultBtnPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   resultBtnSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.success + '60' },
   resultBtnSecondaryText: { color: COLORS.success, fontSize: 14, fontWeight: '600' },
+  processingMessage: { alignItems: 'flex-start', paddingHorizontal: 0, marginTop: 6 },
+  processingMessageText: { fontSize: 12, fontWeight: '500', textAlign: 'left' },
+  laneBreakdown: { marginTop: 10, gap: 4 },
+  laneRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  laneDot: { width: 7, height: 7, borderRadius: 4 },
+  laneCount: { fontSize: 14, fontWeight: '800', minWidth: 20 },
+  laneLabel: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
 
   // ── Weekly reminder ──
   reminderCard: {
