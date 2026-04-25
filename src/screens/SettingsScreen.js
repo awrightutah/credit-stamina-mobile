@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -148,7 +149,7 @@ const SettingsScreen = () => {
           'To receive Credit Stamina alerts, go to Settings → Credit Stamina → Notifications and enable them.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openURL('app-settings:') },
+            { text: 'Open Settings', onPress: () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings() },
           ]
         );
         setPushNotifications(false);
