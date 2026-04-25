@@ -572,6 +572,14 @@ const UploadScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {/* ── AI Processing Disclosure ── */}
+        <View style={styles.aiDisclosureCard}>
+          <Text style={styles.aiDisclosureTitle}>How your report is processed</Text>
+          <Text style={styles.aiDisclosureBody}>
+            By uploading your credit report you agree that your report data will be processed by AI to extract and analyze your accounts. Your raw PDF is never stored — only structured account data is saved to your account.
+          </Text>
+        </View>
+
         {/* ── Upload Button ── */}
         <TouchableOpacity
           style={[
@@ -982,6 +990,28 @@ const styles = StyleSheet.create({
     borderColor: COLORS.purple + '40',
   },
   analysisStepText: { flex: 1, fontSize: 13, color: COLORS.purple, fontWeight: '500' },
+  aiDisclosureCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.purple,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  aiDisclosureTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  aiDisclosureBody: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   analysisProgress: { flex: 1, marginTop: 0, paddingHorizontal: 0, alignItems: 'flex-start' },
 
   // ── Error card ──

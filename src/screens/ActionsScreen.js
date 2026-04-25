@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { actionsAPI, accountsAPI, aiAPI, aiCacheAPI, pointsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import AIDisclaimer from '../components/AIDisclaimer';
 
 const COLORS = {
   staminaBlue: '#1E40AF',
@@ -654,6 +655,11 @@ const ActionsScreen = ({ navigation }) => {
             updating={updatingId === item.id}
           />
         )}
+        ListHeaderComponent={
+          filteredActions.length > 0 ? (
+            <AIDisclaimer style={{ paddingHorizontal: 16, marginBottom: 10, marginTop: 0 }} />
+          ) : null
+        }
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
