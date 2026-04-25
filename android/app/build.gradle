@@ -92,15 +92,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (project.hasProperty('CREDIT_STAMINA_UPLOAD_STORE_FILE')) {
+                storeFile file(CREDIT_STAMINA_UPLOAD_STORE_FILE)
+                storePassword CREDIT_STAMINA_UPLOAD_STORE_PASSWORD
+                keyAlias CREDIT_STAMINA_UPLOAD_KEY_ALIAS
+                keyPassword CREDIT_STAMINA_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Use release signing config when keystore properties are set in global gradle config,
+            // otherwise fall back to debug signing so local builds still work.
+            signingConfig project.hasProperty('CREDIT_STAMINA_UPLOAD_STORE_FILE') ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
