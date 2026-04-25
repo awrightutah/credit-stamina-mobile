@@ -359,7 +359,11 @@ const AccountsScreen = ({ navigation }) => {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [error, setError] = useState(null);
-  const [expandedSections, setExpandedSections] = useState({});
+  const [expandedSections, setExpandedSections] = useState({
+    'Active Damage': true,
+    'Removable': true,
+    'Aging/Monitor': true,
+  });
   const [showBureauInfo, setShowBureauInfo] = useState(false);
 
   // Create / Edit modal
