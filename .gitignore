@@ -93,3 +93,8 @@ ios/CreditStamina*.xcarchive/
 "ios/Podfile 2.lock"
 "ios/Podfile 3.lock"
 "package-lock 2.json"
+
+# macOS sync-conflict duplicates (iCloud Drive / Dropbox / Time Machine)
+* 2
+* 2.*
+* [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] *
