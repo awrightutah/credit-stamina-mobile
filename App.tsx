@@ -11,10 +11,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
+import { UploadProvider } from './src/context/UploadContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import navigationRef from './src/navigation/navigationRef';
 import useNetworkStatus from './src/hooks/useNetworkStatus';
 import OfflineBanner from './src/components/OfflineBanner';
+import ProcessingBanner from './src/components/ProcessingBanner';
 
 function AppContent() {
   const { loading, isAuthenticated } = useAuth();
@@ -41,9 +43,13 @@ function AppContent() {
   };
 
   return (
-    <NavigationContainer ref={navigationRef} linking={linking}>
-      <AppNavigator />
-    </NavigationContainer>
+    <UploadProvider>
+      <NavigationContainer ref={navigationRef} linking={linking}>
+        <AppNavigator />
+      </NavigationContainer>
+      {/* Floats above the navigation stack — driven by UploadContext. */}
+      <ProcessingBanner />
+    </UploadProvider>
   );
 }
 

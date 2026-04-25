@@ -20,6 +20,7 @@ import DocumentPicker from 'react-native-document-picker';
 import { creditReportsAPI, pointsAPI, runPostUploadAnalysis } from '../services/api';
 import { scheduleLocalNotification } from '../services/notifications';
 import ProgressMessage from '../components/ProgressMessage';
+import { useUpload } from '../context/UploadContext';
 
 const UPLOAD_MESSAGES = [
   'Uploading your report...',
@@ -45,9 +46,6 @@ const PROCESSING_MESSAGES = (bureau) => [
   'Calculating score impact...',
   'Almost ready...',
 ];
-
-const POLL_INTERVAL_MS = 5000;
-const POLL_TIMEOUT_MS  = 3 * 60 * 1000;
 
 // iMessage-style three-dot pulsing indicator. Each dot loops with a staggered
 // delay so the pulse travels left-to-right. useNativeDriver keeps it smooth.
@@ -207,68 +205,9 @@ const UploadScreen = ({ navigation }) => {
   const [isParseError, setIsParseError]     = useState(false);
   const [analysisStep, setAnalysisStep]     = useState(''); // post-upload AI analysis progress
 
-  // Polling lifecycle — see startStatusPolling below. Refs so the helper can
-  // close over them without causing stale-closure bugs across re-renders.
-  const pollIntervalRef = useRef(null);
-  const pollDeadlineRef = useRef(0);
-
-  const stopStatusPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-  }, []);
-
-  // Clean up the polling interval on unmount so navigating away doesn't leave
-  // network requests running in the background.
-  useEffect(() => () => stopStatusPolling(), [stopStatusPolling]);
-
-  // Non-blocking poll of /api/upload-status/:id. Updates `result` in place
-  // when status flips to complete/error/timeout. Buttons stay active the whole
-  // time — this is purely to update the success card's subtitle + summary.
-  const startStatusPolling = useCallback((uploadId) => {
-    if (!uploadId) return;
-    stopStatusPolling();
-    pollDeadlineRef.current = Date.now() + POLL_TIMEOUT_MS;
-
-    const tick = async () => {
-      if (Date.now() > pollDeadlineRef.current) {
-        stopStatusPolling();
-        setResult((prev) => prev ? { ...prev, processingState: 'timeout' } : prev);
-        return;
-      }
-      try {
-        const res = await creditReportsAPI.getUploadStatus(uploadId);
-        const payload = res?.data || {};
-        if (payload.status === 'complete') {
-          stopStatusPolling();
-          const d = payload.data || {};
-          setResult((prev) => prev ? {
-            ...prev,
-            processingState: 'complete',
-            accountsFound:       d.accounts_extracted ?? 0,
-            activeDamageCount:   d.active_damage_count ?? 0,
-            removableCount:      d.removable_count ?? 0,
-            agingMonitorCount:   d.aging_monitor_count ?? 0,
-          } : prev);
-        } else if (payload.status === 'error') {
-          stopStatusPolling();
-          setResult((prev) => prev ? {
-            ...prev,
-            processingState: 'error',
-            errorMessage: payload.error || 'Processing failed. Please try uploading again.',
-          } : prev);
-        }
-      } catch (e) {
-        // Network hiccup — keep polling until the deadline.
-        console.warn('[Upload] poll error:', e?.message);
-      }
-    };
-
-    // Fire once immediately so short backends settle fast, then every 5s.
-    tick();
-    pollIntervalRef.current = setInterval(tick, POLL_INTERVAL_MS);
-  }, [stopStatusPolling]);
+  // Global upload state — polling lives in UploadContext so the banner above
+  // the navigation stack stays in sync regardless of which screen is visible.
+  const upload = useUpload();
 
   const [reports, setReports]               = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -475,17 +414,16 @@ const UploadScreen = ({ navigation }) => {
       runPostUploadAnalysis(uploadId, [], [], () => {})
         .catch((e) => console.warn('[Upload] post-upload analysis warmup error:', e?.message));
 
-      // Show the success card. Processing state + lane counts come in later
-      // via startStatusPolling — buttons are active the whole time, so the
-      // user can navigate away without waiting.
+      // Show the success card. The actual processing state + lane counts
+      // come in via UploadContext — its global poll feeds both this card and
+      // the persistent ProcessingBanner above the nav stack.
       setResult({
         success: true,
         uploadId,
         bureau: selectedBureau,
-        processingState: 'processing',
       });
 
-      startStatusPolling(uploadId);
+      upload.startProcessing(uploadId, selectedBureau);
     } catch (err) {
       setUploading(false);
       setParsing(false);
@@ -760,48 +698,43 @@ const UploadScreen = ({ navigation }) => {
             <View style={styles.resultHeader}>
               <Text style={styles.resultIcon}>✅</Text>
               <View style={{ flex: 1 }}>
-                {result.processingState === 'complete' ? (
+                {/* Card display is driven by the shared UploadContext —
+                    same source of truth as the global ProcessingBanner. */}
+                {upload.uploadId === result.uploadId && upload.status === 'complete' ? (
                   <>
                     <Text style={styles.resultTitle}>Your analysis is ready!</Text>
                     <Text style={styles.resultSub}>
-                      Found {result.accountsFound ?? 0} account{result.accountsFound === 1 ? '' : 's'}{result.bureau ? ` on your ${result.bureau} report` : ''}.
+                      Found {upload.accountsFound ?? 0} account{upload.accountsFound === 1 ? '' : 's'}{result.bureau ? ` on your ${result.bureau} report` : ''}.
                     </Text>
                     <View style={styles.laneBreakdown}>
                       <View style={styles.laneRow}>
                         <View style={[styles.laneDot, { backgroundColor: COLORS.danger }]} />
                         <Text style={[styles.laneCount, { color: COLORS.danger }]}>
-                          {result.activeDamageCount ?? 0}
+                          {upload.laneCounts?.activeDamage ?? 0}
                         </Text>
                         <Text style={styles.laneLabel}>need immediate attention</Text>
                       </View>
                       <View style={styles.laneRow}>
                         <View style={[styles.laneDot, { backgroundColor: COLORS.warning }]} />
                         <Text style={[styles.laneCount, { color: COLORS.warning }]}>
-                          {result.removableCount ?? 0}
+                          {upload.laneCounts?.removable ?? 0}
                         </Text>
                         <Text style={styles.laneLabel}>can be disputed</Text>
                       </View>
                       <View style={styles.laneRow}>
                         <View style={[styles.laneDot, { backgroundColor: COLORS.textSecondary }]} />
                         <Text style={[styles.laneCount, { color: COLORS.textSecondary }]}>
-                          {result.agingMonitorCount ?? 0}
+                          {upload.laneCounts?.agingMonitor ?? 0}
                         </Text>
                         <Text style={styles.laneLabel}>to monitor</Text>
                       </View>
                     </View>
                   </>
-                ) : result.processingState === 'timeout' ? (
+                ) : upload.uploadId === result.uploadId && upload.status === 'error' ? (
                   <>
                     <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
                     <Text style={styles.resultSub}>
-                      Your accounts will be ready shortly — check back in a minute.
-                    </Text>
-                  </>
-                ) : result.processingState === 'error' ? (
-                  <>
-                    <Text style={styles.resultTitle}>Report uploaded successfully!</Text>
-                    <Text style={styles.resultSub}>
-                      {result.errorMessage || 'We hit a snag analyzing your report. Please try again.'}
+                      {upload.errorMessage || 'We hit a snag analyzing your report. Please try again.'}
                     </Text>
                   </>
                 ) : (
