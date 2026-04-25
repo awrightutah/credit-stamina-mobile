@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DocumentPicker from 'react-native-document-picker';
+import { pick, types, errorCodes, isErrorWithCode } from '@react-native-documents/picker';
 import { creditReportsAPI, pointsAPI, runPostUploadAnalysis } from '../services/api';
 import { scheduleLocalNotification } from '../services/notifications';
 import ProgressMessage from '../components/ProgressMessage';
@@ -289,8 +289,8 @@ const UploadScreen = ({ navigation }) => {
 
   const pickDocument = async () => {
     try {
-      const res = await DocumentPicker.pick({
-        type: [DocumentPicker.types.pdf],
+      const res = await pick({
+        type: [types.pdf],
         allowMultiSelection: false,
       });
       if (!res?.[0]) return;
@@ -321,7 +321,8 @@ const UploadScreen = ({ navigation }) => {
       setError(null);
       setResult(null);
     } catch (err) {
-      if (!DocumentPicker.isCancel(err)) {
+      const userCanceled = isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED;
+      if (!userCanceled) {
         Alert.alert('Error', 'Failed to open file picker.');
       }
     }
