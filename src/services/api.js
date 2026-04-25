@@ -1037,14 +1037,17 @@ export const householdAPI = {
 // ============================================
 
 // ============================================
-// SERVICE STATES — which states Credit Stamina is licensed to operate in
+// SERVICE STATES — which states Credit Stamina is licensed to operate in.
+// Read paths use v_active_states_public, a clean public view exposing only
+// state_code, state_name, is_active. Admin writes still go to the underlying
+// service_states table since views aren't writable.
 // ============================================
 export const statesAPI = {
-  // Returns all 50 states with their is_active flag (public, no auth needed)
+  // Returns all 51 states with their is_active flag (public, no auth needed)
   getAll: async () => {
     const { data, error } = await supabase
-      .from('service_states')
-      .select('state_code, state_name, is_active, note')
+      .from('v_active_states_public')
+      .select('state_code, state_name, is_active')
       .order('state_name');
     if (error) throw error;
     return data ?? [];
@@ -1053,7 +1056,7 @@ export const statesAPI = {
   // Returns just the active state codes — used for registration check
   getActiveCodes: async () => {
     const { data, error } = await supabase
-      .from('service_states')
+      .from('v_active_states_public')
       .select('state_code')
       .eq('is_active', true);
     if (error) throw error;
@@ -1064,7 +1067,7 @@ export const statesAPI = {
   isStateActive: async (stateCode) => {
     if (!stateCode) return false;
     const { data, error } = await supabase
-      .from('service_states')
+      .from('v_active_states_public')
       .select('is_active')
       .eq('state_code', stateCode.toUpperCase().trim())
       .single();
@@ -1072,7 +1075,8 @@ export const statesAPI = {
     return data.is_active === true;
   },
 
-  // Admin: toggle a state on or off
+  // Admin: toggle a state on or off. Writes hit service_states because the
+  // public view is read-only.
   setActive: async (stateCode, isActive) => {
     const { data, error } = await supabase
       .from('service_states')
