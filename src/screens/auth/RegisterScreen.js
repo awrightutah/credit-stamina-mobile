@@ -507,12 +507,12 @@ const RegisterScreen = ({ navigation }) => {
             By creating an account, you agree to our{' '}
             <Text
               style={styles.termsLink}
-              onPress={() => Linking.openURL('https://creditstamina.com/terms').catch(() => {})}
+              onPress={() => Linking.openURL('https://app.creditstamina.com/terms').catch(() => {})}
             >Terms of Service</Text>
             {' '}and{' '}
             <Text
               style={styles.termsLink}
-              onPress={() => Linking.openURL('https://creditstamina.com/privacy').catch(() => {})}
+              onPress={() => Linking.openURL('https://app.creditstamina.com/privacy').catch(() => {})}
             >Privacy Policy</Text>
           </Text>
         </View>

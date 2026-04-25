@@ -542,12 +542,12 @@ const ProfileScreen = ({ route }) => {
           <MenuItem
             icon="🔏"
             title="Privacy Policy"
-            onPress={() => Linking.openURL('https://creditstamina.com/privacy').catch(() => {})}
+            onPress={() => Linking.openURL('https://app.creditstamina.com/privacy').catch(() => {})}
           />
           <MenuItem
             icon="📄"
             title="Terms of Service"
-            onPress={() => Linking.openURL('https://creditstamina.com/terms').catch(() => {})}
+            onPress={() => Linking.openURL('https://app.creditstamina.com/terms').catch(() => {})}
             last
           />
         </SectionCard>

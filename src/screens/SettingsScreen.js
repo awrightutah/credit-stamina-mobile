@@ -446,11 +446,11 @@ const SettingsScreen = () => {
 
           <LinkRow
             title="Privacy Policy"
-            onPress={() => openURL('https://creditstamina.com/privacy')}
+            onPress={() => openURL('https://app.creditstamina.com/privacy')}
           />
           <LinkRow
             title="Terms of Service"
-            onPress={() => openURL('https://creditstamina.com/terms')}
+            onPress={() => openURL('https://app.creditstamina.com/terms')}
             last
           />
         </Section>

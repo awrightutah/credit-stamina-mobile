@@ -160,13 +160,13 @@ const PrivacySecurityScreen = () => {
             icon="📄"
             title="Privacy Policy"
             subtitle="How we handle your financial data"
-            onPress={() => Linking.openURL('https://creditstamina.com/privacy').catch(() => {})}
+            onPress={() => Linking.openURL('https://app.creditstamina.com/privacy').catch(() => {})}
           />
           <Row
             icon="📋"
             title="Terms of Service"
             subtitle="Your rights and our commitments"
-            onPress={() => Linking.openURL('https://creditstamina.com/terms').catch(() => {})}
+            onPress={() => Linking.openURL('https://app.creditstamina.com/terms').catch(() => {})}
           />
           <Row
             icon="✉️"
