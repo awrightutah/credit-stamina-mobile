@@ -3,7 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { legalAPI } from '../services/api';
 
-const CONSENT_VERSION = '1.0';
+// 1.1 — adds explicit 15 U.S.C. §7001 et seq. citation to the consent copy.
+// Existing 1.0 consents remain valid (the substantive agreement is unchanged;
+// the citation is a clarifying legal reference), so we don't re-prompt users
+// who already consented under 1.0.
+const CONSENT_VERSION = '1.1';
 
 /**
  * Tracks the current user's eSign consent status.
