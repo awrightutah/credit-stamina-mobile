@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { pick, types, errorCodes, isErrorWithCode } from '@react-native-documents/picker';
+import { pick, types, errorCodes, isErrorWithCode, keepLocalCopy } from '@react-native-documents/picker';
 import { creditReportsAPI, pointsAPI, runPostUploadAnalysis } from '../services/api';
 import { scheduleLocalNotification } from '../services/notifications';
 import ProgressMessage from '../components/ProgressMessage';
@@ -294,11 +294,32 @@ const UploadScreen = ({ navigation }) => {
         allowMultiSelection: false,
       });
       if (!res?.[0]) return;
+      const picked = res[0];
+
+      // Android SAF returns content:// URIs which RN's multipart upload can't
+      // reliably read. Materialize to a file:// copy in cachesDirectory so the
+      // existing upload code path works the same on both platforms.
+      let resolvedUri = picked.uri;
+      if (Platform.OS === 'android' && picked.uri.startsWith('content://')) {
+        const [copyResult] = await keepLocalCopy({
+          files: [{ uri: picked.uri, fileName: picked.name ?? 'report.pdf' }],
+          destination: 'cachesDirectory',
+        });
+        if (copyResult?.status !== 'success') {
+          Alert.alert(
+            'File Access Error',
+            'We could not read the selected file. Please try picking it again.'
+          );
+          return;
+        }
+        resolvedUri = copyResult.localUri;
+      }
+
       const file = {
-        uri:  res[0].uri,
-        name: res[0].name,
-        size: res[0].size,
-        type: res[0].type,
+        uri:  resolvedUri,
+        name: picked.name,
+        size: picked.size,
+        type: picked.type,
       };
 
       const signal = validateFilename(file.name);
