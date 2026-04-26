@@ -220,6 +220,60 @@ export const creditReportsAPI = {
     return api.delete(`/api/credit-reports/${id}`);
   },
   
+  // Android-specific upload: bypass RN's FormData serializer (which fails
+  // with "Stream Closed" on { uri } parts and "Unrecognized FormData part"
+  // on Blob parts in RN 0.85) by constructing the multipart body manually
+  // and sending raw bytes via fetch().
+  uploadAndroidDirect: async ({ fileUri, fileName, fileType, bureau }) => {
+    const fileResp = await fetch(fileUri);
+    const fileBuf = await fileResp.arrayBuffer();
+    const fileBytes = new Uint8Array(fileBuf);
+
+    const boundary = '----RNUpload' + Math.random().toString(36).slice(2);
+    const enc = new TextEncoder();
+    const fileHeader = enc.encode(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="pdf"; filename="${fileName}"\r\n` +
+      `Content-Type: ${fileType || 'application/pdf'}\r\n\r\n`
+    );
+    const fileFooter  = enc.encode('\r\n');
+    const bureauPart  = enc.encode(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="bureau"\r\n\r\n` +
+      `${bureau}\r\n`
+    );
+    const closing     = enc.encode(`--${boundary}--\r\n`);
+
+    const total = fileHeader.length + fileBytes.length + fileFooter.length + bureauPart.length + closing.length;
+    const body = new Uint8Array(total);
+    let off = 0;
+    body.set(fileHeader, off); off += fileHeader.length;
+    body.set(fileBytes,  off); off += fileBytes.length;
+    body.set(fileFooter, off); off += fileFooter.length;
+    body.set(bureauPart, off); off += bureauPart.length;
+    body.set(closing,    off);
+
+    const token = await getStoredToken();
+    const res = await fetch(`${API_URL}/api/upload-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        ...(token ? { Authorization: `Bearer ${token}`, 'x-user-token': token } : {}),
+      },
+      body: body.buffer,
+    });
+
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { data = text; }
+    if (!res.ok) {
+      const err = new Error(data?.error || `Upload failed: ${res.status}`);
+      err.response = { status: res.status, data };
+      throw err;
+    }
+    return { data, status: res.status };
+  },
+
   // Upload and parse credit report PDF with AI.
   // Backend returns 202 { uploadId } immediately and processes in the
   // background; callers must poll getUploadStatus(uploadId) for results.

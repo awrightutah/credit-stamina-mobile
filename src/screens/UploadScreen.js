@@ -388,20 +388,33 @@ const UploadScreen = ({ navigation }) => {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('pdf', {
-        uri:  Platform.OS === 'ios' ? selectedFile.uri.replace('file://', '') : selectedFile.uri,
-        type: selectedFile.type || 'application/pdf',
-        name: selectedFile.name,
-      });
-      formData.append('bureau', selectedBureau);
-
       setUploading(false);
       setParsing(true);
 
-      const response = await creditReportsAPI.upload(formData, (progress) => {
-        setUploadProgress(progress);
-      });
+      let response;
+      if (Platform.OS === 'android') {
+        // RN 0.85's NetworkingModule cannot upload via FormData on Android:
+        // { uri } parts fail with "Stream Closed" and Blob parts fail with
+        // "Unrecognized FormData part." Use the platform-specific direct
+        // multipart helper that bypasses FormData entirely.
+        response = await creditReportsAPI.uploadAndroidDirect({
+          fileUri:  selectedFile.uri,
+          fileName: selectedFile.name,
+          fileType: selectedFile.type,
+          bureau:   selectedBureau,
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('pdf', {
+          uri:  selectedFile.uri.replace('file://', ''),
+          type: selectedFile.type || 'application/pdf',
+          name: selectedFile.name,
+        });
+        formData.append('bureau', selectedBureau);
+        response = await creditReportsAPI.upload(formData, (progress) => {
+          setUploadProgress(progress);
+        });
+      }
 
       // Backend returns 202 { uploadId, status: 'processing' } — server is
       // analyzing in the background. We do NOT poll the user's screen any
