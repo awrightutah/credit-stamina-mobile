@@ -460,6 +460,42 @@ const UploadScreen = ({ navigation }) => {
 
       upload.startProcessing(uploadId, selectedBureau);
     } catch (err) {
+      // [Upload Error] permanent diagnostic — silent catches are a landmine.
+      // Split into focused warns to stay under logcat's ~4000 char per-line cap.
+      console.warn('[Upload Error] basic', JSON.stringify({
+        message:  err?.message,
+        code:     err?.code,
+        status:   err?.response?.status,
+        platform: Platform.OS,
+      }));
+      console.warn('[Upload Error] file', JSON.stringify({
+        fileUri:  selectedFile?.uri,
+        fileType: selectedFile?.type,
+        fileName: selectedFile?.name,
+        fileSize: selectedFile?.size,
+      }));
+      console.warn('[Upload Error] config', JSON.stringify({
+        method:  err?.config?.method,
+        baseURL: err?.config?.baseURL,
+        url:     err?.config?.url,
+        headers: err?.config?.headers,
+        timeout: err?.config?.timeout,
+      }));
+      let axiosTrim = null;
+      try {
+        const j = err?.toJSON?.();
+        if (j) {
+          const { stack, ...rest } = j;
+          axiosTrim = rest;
+        }
+      } catch {}
+      console.warn('[Upload Error] axios', JSON.stringify(axiosTrim));
+      console.warn('[Upload Error] request', JSON.stringify({
+        requestData:       err?.request?._response,
+        requestURL:        err?.request?.responseURL,
+        requestStatus:     err?.request?.status,
+        requestReadyState: err?.request?.readyState,
+      }));
       setUploading(false);
       setParsing(false);
       setAnalysisStep('');

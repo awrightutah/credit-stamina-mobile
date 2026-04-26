@@ -34,6 +34,24 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    // [Upload Error] interceptor diagnostic — capture both attempts before
+    // the retry swallows the first one. Scoped to upload endpoint to keep
+    // other API errors quiet. Two short warns to stay under logcat's per-
+    // line cap.
+    if (original?.url === '/api/upload-pdf') {
+      const attempt = original._networkRetry ? 'retry' : 'attempt-1';
+      console.warn(`[Upload Error] interceptor ${attempt} basic`, JSON.stringify({
+        message: error?.message,
+        code:    error?.code,
+        status:  error?.response?.status,
+      }));
+      console.warn(`[Upload Error] interceptor ${attempt} request`, JSON.stringify({
+        requestData:       error?.request?._response,
+        requestStatus:     error?.request?.status,
+        requestReadyState: error?.request?.readyState,
+      }));
+    }
+
     // Retry once on network error (ConnectionRefused, timeout, no response)
     if (!error.response && !original._networkRetry) {
       original._networkRetry = true;
