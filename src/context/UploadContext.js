@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { creditReportsAPI } from '../services/api';
 
 const POLL_INTERVAL_MS  = 5000;
-const POLL_TIMEOUT_MS   = 3 * 60 * 1000; // 3 minutes hard cap
+const POLL_TIMEOUT_MS   = 8 * 60 * 1000; // 8 minutes hard cap (reports can take 2-5 min normally)
 const COMPLETE_DISMISS_MS = 5000;        // auto-dismiss the green banner after 5s
 
 const UploadContext = createContext({
@@ -83,7 +83,7 @@ export const UploadProvider = ({ children }) => {
       if (Date.now() > deadlineRef.current) {
         stopPolling();
         setStatus('error');
-        setErrorMessage('Taking longer than expected. Check back in a minute.');
+        setErrorMessage('Your report is still processing in the background. We will notify you when it is ready.');
         return;
       }
       try {
