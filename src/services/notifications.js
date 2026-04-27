@@ -1,30 +1,37 @@
-import { Platform, NativeModules, Alert, Linking } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging from '@react-native-firebase/messaging';
 import api from './api';
+import { version as appVersion } from '../../package.json';
 
 const TOKEN_KEY = '@push_device_token';
 
-// ── Guard: only use PushNotificationIOS if the native module is actually present ──
-// The NativeEventEmitter inside the library throws if RNCPushNotificationIOS is null,
-// which happens in the simulator on cold boot or when the app loads before the bridge
-// is fully ready. All exported functions check this before touching the library.
+// ── Firebase availability guard ────────────────────────────────────────────────
+// In tests, Storybook, or environments where the native Firebase module isn't
+// linked, every push function silently no-ops instead of throwing.
 
-const isNativeModuleAvailable = () => {
+const isFirebaseAvailable = () => {
   try {
-    return (
-      Platform.OS === 'ios' &&
-      !!NativeModules.RNCPushNotificationIOS
-    );
+    return typeof messaging === 'function' && !!messaging().app;
   } catch {
     return false;
   }
 };
 
-// Lazy accessor so we never import the module at the top level on unsupported platforms.
-// This avoids the NativeEventEmitter construction happening at require-time.
+// ── PushNotificationIOS availability guard (LOCAL notifications only) ─────────
+// Kept around for scheduleLocalNotification + badge management. iOS-only.
+
+const isPushNotificationIOSAvailable = () => {
+  try {
+    return Platform.OS === 'ios' && !!NativeModules.RNCPushNotificationIOS;
+  } catch {
+    return false;
+  }
+};
+
 let _PushNotificationIOS = null;
-const getPushLib = () => {
-  if (!isNativeModuleAvailable()) return null;
+const getPushNotificationIOS = () => {
+  if (!isPushNotificationIOSAvailable()) return null;
   if (!_PushNotificationIOS) {
     try {
       _PushNotificationIOS = require('@react-native-community/push-notification-ios').default;
@@ -36,168 +43,216 @@ const getPushLib = () => {
   return _PushNotificationIOS;
 };
 
-// ── Permission request ────────────────────────────────────────────────────────
+// ── Permission helpers ────────────────────────────────────────────────────────
+// AuthorizationStatus enum (RNFB messaging):
+//   -1 NOT_DETERMINED, 0 DENIED, 1 AUTHORIZED, 2 PROVISIONAL, 3 EPHEMERAL
+// "Granted" = AUTHORIZED | PROVISIONAL | EPHEMERAL.
 
-export const requestNotificationPermission = () =>
-  new Promise((resolve) => {
-    const lib = getPushLib();
-    if (!lib) { resolve({ granted: false }); return; }
-    try {
-      lib.requestPermissions({ alert: true, badge: true, sound: true })
-        .then((perms) => resolve({ granted: !!(perms.alert || perms.badge || perms.sound) }))
-        .catch(() => resolve({ granted: false }));
-    } catch (e) {
-      console.warn('[Notifications] requestPermissions error:', e?.message);
-      resolve({ granted: false });
-    }
-  });
-
-export const checkNotificationPermissions = () =>
-  new Promise((resolve) => {
-    const lib = getPushLib();
-    if (!lib) { resolve({ alert: false, badge: false, sound: false }); return; }
-    try {
-      lib.checkPermissions((perms) =>
-        resolve({ alert: !!perms.alert, badge: !!perms.badge, sound: !!perms.sound })
-      );
-    } catch (e) {
-      console.warn('[Notifications] checkPermissions error:', e?.message);
-      resolve({ alert: false, badge: false, sound: false });
-    }
-  });
-
-// ── Device token ──────────────────────────────────────────────────────────────
-
-export const getStoredDeviceToken = async () => {
-  try { return await AsyncStorage.getItem(TOKEN_KEY); } catch { return null; }
+const isGrantedStatus = (status) => {
+  const s = messaging.AuthorizationStatus;
+  return status === s.AUTHORIZED || status === s.PROVISIONAL || status === s.EPHEMERAL;
 };
 
-export const registerForPushNotifications = () =>
-  new Promise((resolve) => {
-    const lib = getPushLib();
-    if (!lib) { resolve(null); return; }
+const permissionsResult = (granted, status = null) => ({
+  granted,
+  alert: granted,
+  badge: granted,
+  sound: granted,
+  status,
+});
 
-    let settled = false;
-    const finish = (token) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { lib.removeEventListener('register'); } catch {}
-      resolve(token);
-    };
+export const requestNotificationPermission = async () => {
+  if (!isFirebaseAvailable()) return permissionsResult(false);
+  try {
+    const status = await messaging().requestPermission();
+    return permissionsResult(isGrantedStatus(status), status);
+  } catch (e) {
+    console.warn('[Notifications] requestPermission error:', e?.message);
+    return permissionsResult(false);
+  }
+};
 
-    const timer = setTimeout(() => finish(null), 10000);
+export const checkNotificationPermissions = async () => {
+  if (!isFirebaseAvailable()) return permissionsResult(false);
+  try {
+    const status = await messaging().hasPermission();
+    return permissionsResult(isGrantedStatus(status), status);
+  } catch (e) {
+    console.warn('[Notifications] hasPermission error:', e?.message);
+    return permissionsResult(false);
+  }
+};
 
-    try {
-      lib.addEventListener('register', (deviceToken) => {
-        AsyncStorage.setItem(TOKEN_KEY, deviceToken).catch(() => null);
-        uploadTokenToBackend(deviceToken).catch(() => null);
-        finish(deviceToken);
-      });
-
-      lib.requestPermissions({ alert: true, badge: true, sound: true })
-        .catch(() => finish(null));
-    } catch (e) {
-      console.warn('[Notifications] register error:', e?.message);
-      finish(null);
-    }
-  });
+// ── Device token (FCM) ────────────────────────────────────────────────────────
 
 export const uploadTokenToBackend = async (token) => {
   if (!token) return;
   try {
-    await api.post('/api/notifications/register-token', { device_token: token, platform: 'ios' });
+    await api.post('/api/devices/register', {
+      token,
+      platform: Platform.OS,
+      app_version: appVersion,
+    });
   } catch (e) {
     console.warn('[Notifications] token upload failed:', e?.message);
   }
 };
 
+export const registerForPushNotifications = async () => {
+  if (!isFirebaseAvailable()) return null;
+  try {
+    const token = await messaging().getToken();
+    if (!token) return null;
+    await AsyncStorage.setItem(TOKEN_KEY, token).catch(() => null);
+    await uploadTokenToBackend(token);
+    return token;
+  } catch (e) {
+    console.warn('[Notifications] getToken error:', e?.message);
+    return null;
+  }
+};
+
 export const unregisterPushNotifications = async () => {
   try {
-    const token = await getStoredDeviceToken();
-    if (token) {
-      await api.post('/api/notifications/unregister-token', { device_token: token, platform: 'ios' })
-        .catch(() => null);
+    const stored = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+    if (stored) {
+      await api.post('/api/devices/unregister', {
+        token: stored,
+        platform: Platform.OS,
+      }).catch(() => null);
     }
-    await AsyncStorage.removeItem(TOKEN_KEY);
+    if (isFirebaseAvailable()) {
+      await messaging().deleteToken().catch(() => null);
+    }
+    await AsyncStorage.removeItem(TOKEN_KEY).catch(() => null);
   } catch (e) {
     console.warn('[Notifications] unregister error:', e?.message);
   }
 };
 
-// ── Global notification handlers ──────────────────────────────────────────────
-// Call once at app startup (index.js). Safe to call even if native module is absent.
-
-export const setupNotificationHandlers = ({ onNotification, onOpen } = {}) => {
-  const lib = getPushLib();
-  if (!lib) {
-    console.log('[Notifications] native module not available — push notifications disabled');
-    return () => {}; // no-op cleanup
-  }
-
+// Subscribe to FCM token rotation. Caller invokes the returned function to unsub.
+export const onTokenRefresh = (callback) => {
+  if (!isFirebaseAvailable() || typeof callback !== 'function') return () => {};
   try {
-    lib.addEventListener('notification', (notification) => {
+    return messaging().onTokenRefresh(async (newToken) => {
       try {
-        notification.finish(lib.FetchResult?.NoData ?? 'noData');
-        onNotification?.(formatNotification(notification));
+        await AsyncStorage.setItem(TOKEN_KEY, newToken).catch(() => null);
+        await uploadTokenToBackend(newToken);
+        callback(newToken);
       } catch (e) {
-        console.warn('[Notifications] notification handler error:', e?.message);
+        console.warn('[Notifications] onTokenRefresh handler error:', e?.message);
       }
-    });
-
-    lib.addEventListener('localNotification', (notification) => {
-      try {
-        onOpen?.(formatNotification(notification));
-      } catch (e) {
-        console.warn('[Notifications] localNotification handler error:', e?.message);
-      }
-    });
-
-    lib.addEventListener('registrationError', (err) => {
-      console.warn('[Notifications] registration error:', err?.message);
     });
   } catch (e) {
-    console.warn('[Notifications] setupNotificationHandlers error:', e?.message);
+    console.warn('[Notifications] onTokenRefresh subscribe error:', e?.message);
     return () => {};
+  }
+};
+
+// ── Global notification handlers ──────────────────────────────────────────────
+// Subscribes to:
+//   - Firebase foreground messages          → onNotification
+//   - Firebase background-tap (warm)        → onOpen
+//   - Firebase cold-start tap (one-shot)    → onOpen
+//   - PushNotificationIOS local-notif tap   → onOpen  (letter reminders, etc.)
+
+export const setupNotificationHandlers = ({ onNotification, onOpen } = {}) => {
+  const unsubs = [];
+
+  if (isFirebaseAvailable()) {
+    try {
+      unsubs.push(
+        messaging().onMessage((remoteMessage) => {
+          try { onNotification?.(formatRemoteMessage(remoteMessage)); }
+          catch (e) { console.warn('[Notifications] onMessage handler error:', e?.message); }
+        })
+      );
+      unsubs.push(
+        messaging().onNotificationOpenedApp((remoteMessage) => {
+          try { onOpen?.(formatRemoteMessage(remoteMessage)); }
+          catch (e) { console.warn('[Notifications] onNotificationOpenedApp handler error:', e?.message); }
+        })
+      );
+      messaging()
+        .getInitialNotification()
+        .then((remoteMessage) => {
+          if (remoteMessage) {
+            try { onOpen?.(formatRemoteMessage(remoteMessage)); }
+            catch (e) { console.warn('[Notifications] getInitialNotification handler error:', e?.message); }
+          }
+        })
+        .catch(() => null);
+    } catch (e) {
+      console.warn('[Notifications] Firebase handler setup error:', e?.message);
+    }
+  } else {
+    console.log('[Notifications] Firebase not available — remote push disabled');
+  }
+
+  const lib = getPushNotificationIOS();
+  if (lib) {
+    try {
+      lib.addEventListener('localNotification', (notification) => {
+        try { onOpen?.(formatLocalNotification(notification)); }
+        catch (e) { console.warn('[Notifications] localNotification handler error:', e?.message); }
+      });
+      unsubs.push(() => {
+        try { lib.removeEventListener('localNotification'); } catch {}
+      });
+    } catch (e) {
+      console.warn('[Notifications] local handler setup error:', e?.message);
+    }
   }
 
   return () => {
-    try {
-      lib.removeEventListener('notification');
-      lib.removeEventListener('localNotification');
-      lib.removeEventListener('registrationError');
-    } catch {}
+    for (const u of unsubs) {
+      try { u(); } catch {}
+    }
   };
 };
 
-const formatNotification = (notification) => {
+const formatRemoteMessage = (m) => {
   try {
     return {
-      id:    notification.getId?.()          ?? null,
-      title: notification.getTitle?.()       ?? '',
-      body:  notification.getMessage?.()     ?? '',
-      data:  notification.getData?.()        ?? {},
-      badge: notification.getBadgeCount?.()  ?? 0,
+      id:    m?.messageId ?? null,
+      title: m?.notification?.title ?? '',
+      body:  m?.notification?.body  ?? '',
+      data:  m?.data ?? {},
+      badge: 0,
     };
   } catch {
     return { id: null, title: '', body: '', data: {}, badge: 0 };
   }
 };
 
-// ── Badge management ──────────────────────────────────────────────────────────
+const formatLocalNotification = (notification) => {
+  try {
+    return {
+      id:    notification.getId?.()         ?? null,
+      title: notification.getTitle?.()      ?? '',
+      body:  notification.getMessage?.()    ?? '',
+      data:  notification.getData?.()       ?? {},
+      badge: notification.getBadgeCount?.() ?? 0,
+    };
+  } catch {
+    return { id: null, title: '', body: '', data: {}, badge: 0 };
+  }
+};
+
+// ── Badge management (iOS local) ──────────────────────────────────────────────
 
 export const setBadgeCount = (count) => {
-  const lib = getPushLib();
+  const lib = getPushNotificationIOS();
   if (!lib) return;
   try { lib.setApplicationIconBadgeNumber(count); } catch {}
 };
 
 export const clearBadge = () => setBadgeCount(0);
 
-// ── Local notifications ───────────────────────────────────────────────────────
+// ── Local notifications (iOS only via PushNotificationIOS) ────────────────────
 
 export const scheduleLocalNotification = (title, body, fireDate, userInfo = {}) => {
-  const lib = getPushLib();
+  const lib = getPushNotificationIOS();
   if (!lib) return;
   try {
     lib.scheduleLocalNotification({
@@ -225,7 +280,7 @@ export const scheduleLetterReminder = async (letterId, recipientName, isBureau =
 
   try {
     await AsyncStorage.setItem(letterReminderKey(letterId), fireDate.toISOString());
-    const lib = getPushLib();
+    const lib = getPushNotificationIOS();
     if (!lib) return;
     lib.scheduleLocalNotification({
       alertTitle: 'Letter Follow-Up Reminder',
@@ -242,8 +297,6 @@ export const scheduleLetterReminder = async (letterId, recipientName, isBureau =
 export const cancelLetterReminder = async (letterId) => {
   try {
     await AsyncStorage.removeItem(letterReminderKey(letterId));
-    // PushNotificationIOS doesn't support cancel-by-userInfo, but removing from
-    // storage prevents any deep-link action if the notification still fires.
   } catch (e) {
     console.warn('[Notifications] cancelLetterReminder error:', e?.message);
   }

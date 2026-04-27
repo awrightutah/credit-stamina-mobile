@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "21516517481",
+    "project_id": "credit-stamina",
+    "storage_bucket": "credit-stamina.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:21516517481:android:f74b784aebad6db5b7e2f8",
+        "android_client_info": {
+          "package_name": "com.creditstamina.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjmkW0yfqwisGEmfpud9bRtF3702F5l-U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

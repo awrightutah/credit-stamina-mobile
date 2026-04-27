@@ -3,14 +3,26 @@ import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, resetPas
 import { setStoredToken, authAPI } from '../services/api';
 import { updateBiometricSession } from '../services/biometrics';
 import { friendlyAuthError } from '../utils/authErrors';
-// Push notification helpers — imported lazily inside login() to avoid
-// NativeEventEmitter initialization before the bridge is ready.
+// Push notification helpers — imported lazily so the rest of auth still
+// works in environments where Firebase isn't initialized (tests, etc.).
 const getPushHelpers = () => {
   try {
     const mod = require('../services/notifications');
-    return { registerForPushNotifications: mod.registerForPushNotifications, checkNotificationPermissions: mod.checkNotificationPermissions };
+    return {
+      registerForPushNotifications:   mod.registerForPushNotifications,
+      unregisterPushNotifications:    mod.unregisterPushNotifications,
+      checkNotificationPermissions:   mod.checkNotificationPermissions,
+      requestNotificationPermission:  mod.requestNotificationPermission,
+      onTokenRefresh:                 mod.onTokenRefresh,
+    };
   } catch {
-    return { registerForPushNotifications: async () => null, checkNotificationPermissions: async () => ({ alert: false }) };
+    return {
+      registerForPushNotifications:   async () => null,
+      unregisterPushNotifications:    async () => {},
+      checkNotificationPermissions:   async () => ({ granted: false, alert: false }),
+      requestNotificationPermission:  async () => ({ granted: false, alert: false }),
+      onTokenRefresh:                 () => () => {},
+    };
   }
 };
 
@@ -40,6 +52,18 @@ export const AuthProvider = ({ children }) => {
         setUser(currentSession?.user ?? null);
         if (currentSession?.access_token) {
           setStoredToken(currentSession.access_token);
+        }
+        // Cold-start: if user is already signed in and has granted
+        // notification permission, silently refresh the FCM token.
+        // Never prompts — only the post-login flow does that.
+        if (currentSession?.user) {
+          try {
+            const { checkNotificationPermissions, registerForPushNotifications } = getPushHelpers();
+            const perms = await checkNotificationPermissions();
+            if (perms.granted) {
+              registerForPushNotifications().catch(() => null);
+            }
+          } catch {}
         }
       } catch (e) {
         if (isRefreshTokenError(e)) {
@@ -91,19 +115,47 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  // Subscribe to FCM token rotation while authenticated. Re-uploads the
+  // refreshed token to the backend automatically. Cleanup on sign-out
+  // or unmount; keyed on user.id so we don't accumulate listeners.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let unsub = () => {};
+    try {
+      const { onTokenRefresh } = getPushHelpers();
+      unsub = onTokenRefresh(() => {
+        // Token already re-uploaded inside onTokenRefresh — nothing else to do.
+      });
+    } catch {}
+    return () => { try { unsub(); } catch {} };
+  }, [user?.id]);
+
   const login = async (email, password) => {
     try {
       setError(null);
       setSessionExpiredMessage(null);
       setLoading(true);
       const data = await signIn(email, password);
-      // Request push notification permission after successful login (non-blocking, never throws)
-      try {
-        const { checkNotificationPermissions, registerForPushNotifications } = getPushHelpers();
-        checkNotificationPermissions().then(({ alert }) => {
-          if (!alert) registerForPushNotifications().catch(() => null);
-        }).catch(() => null);
-      } catch {}
+      // Post-login push setup — non-blocking, never throws.
+      // If permission already granted: register silently.
+      // If not yet asked: prompt; on grant, register.
+      // If denied: do nothing.
+      (async () => {
+        try {
+          const {
+            checkNotificationPermissions,
+            requestNotificationPermission,
+            registerForPushNotifications,
+          } = getPushHelpers();
+          const perms = await checkNotificationPermissions();
+          if (perms.granted) {
+            await registerForPushNotifications();
+          } else {
+            const result = await requestNotificationPermission();
+            if (result.granted) await registerForPushNotifications();
+          }
+        } catch {}
+      })();
 
       return data;
     } catch (e) {
@@ -167,6 +219,12 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setLoading(true);
+      // Tear down push registration before clearing the session so the backend
+      // mapping (user → token) is removed and Firebase forgets the local token.
+      try {
+        const { unregisterPushNotifications } = getPushHelpers();
+        await unregisterPushNotifications();
+      } catch {}
       await clearStoredSession();
       setUser(null);
       setSession(null);
