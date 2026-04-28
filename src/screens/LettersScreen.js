@@ -153,12 +153,8 @@ const getRecommendation = (account) => {
       reason: `${name} appears removable. A Debt Validation letter forces ${bureau} to prove the debt is valid — if they can't, it must be removed.`,
     };
   }
-  // Aging / Monitor
-  return {
-    letterType: 'goodwill',
-    bureau,
-    reason: `${name} is aging off your report. A Goodwill letter kindly asks ${bureau} to remove this mark early in recognition of your improved payment behavior.`,
-  };
+  // Aging/Monitor or unclassified — no dispute recommendation.
+  return null;
 };
 
 // Hardship accounts (past due / delinquent)
