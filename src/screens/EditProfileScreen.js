@@ -38,9 +38,10 @@ const Field = ({ label, hint, children }) => (
   </View>
 );
 
-const EditProfileScreen = ({ navigation }) => {
+const EditProfileScreen = ({ navigation, route }) => {
   const { user, updateProfile } = useAuth();
   const meta = user?.user_metadata ?? {};
+  const requireAllFields = route?.params?.requireAllFields === true;
 
   const [fullName,  setFullName]  = useState(meta.full_name ?? '');
   const [phone,     setPhone]     = useState(meta.phone ?? '');
@@ -81,6 +82,12 @@ const EditProfileScreen = ({ navigation }) => {
     if (!fullName.trim()) {
       setError('Full name is required');
       return;
+    }
+    if (requireAllFields) {
+      if (!street.trim() || !city.trim() || !stateVal.trim() || !zip.trim()) {
+        setError('Street, city, state, and zip are all required to send dispute letters');
+        return;
+      }
     }
 
     try {

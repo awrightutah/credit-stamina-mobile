@@ -984,14 +984,37 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
 const LettersScreen = ({ route }) => {
   const { user } = useAuth();
   const { subscription } = useSubscription();
+  const navigation = useNavigation();
   const isPaid = subscription?.is_active === true;
   const [upgradePromptVisible, setUpgradePromptVisible] = useState(false);
 
   // Free/trial users hit the ProUpgradePrompt instead of opening the
-  // generate-letter compose modal.
+  // generate-letter compose modal. Then a profile-completeness check —
+  // name + 4 address pieces. Phone/email optional.
   const handleNewLetterTap = () => {
-    if (isPaid) setGenerateVisible(true);
-    else setUpgradePromptVisible(true);
+    if (!isPaid) {
+      setUpgradePromptVisible(true);
+      return;
+    }
+    const meta = user?.user_metadata ?? {};
+    const fullName = (meta.full_name || meta.name || '').trim();
+    const street = (meta.address_street || meta.address || meta.mailing_address || '').trim();
+    const city = (meta.address_city || meta.city || '').trim();
+    const stateVal = (meta.address_state || meta.state || '').trim();
+    const zip = (meta.address_zip || meta.zip || meta.postal_code || '').trim();
+    const isComplete = fullName && street && city && stateVal && zip;
+    if (!isComplete) {
+      Alert.alert(
+        'Complete your profile',
+        'Dispute letters need your full name and mailing address. Add them to your profile to send letters.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Edit Profile', onPress: () => navigation.navigate('EditProfile', { requireAllFields: true }) },
+        ]
+      );
+      return;
+    }
+    setGenerateVisible(true);
   };
   const [letters, setLetters]       = useState([]);
   const [accounts, setAccounts]     = useState([]);
