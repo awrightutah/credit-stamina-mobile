@@ -1051,13 +1051,20 @@ const LettersScreen = ({ route }) => {
 
   const handleGenerate = async (params) => {
     const meta = user?.user_metadata ?? {};
+    const street = meta.address || meta.mailing_address || '';
+    const city = meta.city || '';
+    const stateVal = meta.state || '';
+    const zip = meta.zip || meta.postal_code || '';
+    const cityStateZip = (city || stateVal || zip)
+      ? `${city}${city && stateVal ? ', ' : ''}${stateVal}${stateVal && zip ? ' ' : ''}${zip}`
+      : '';
+    const userAddress = [street, cityStateZip].filter(Boolean).join('\n');
     const enriched = {
       ...params,
-      sender_name: meta.full_name || meta.name || user?.email || '',
-      sender_address: meta.address || meta.mailing_address || '',
-      sender_city: meta.city || '',
-      sender_state: meta.state || '',
-      sender_zip: meta.zip || meta.postal_code || '',
+      user_name: meta.full_name || meta.name || user?.email || '',
+      user_address: userAddress,
+      user_phone: meta.phone || '',
+      user_email: user?.email || '',
     };
     await lettersAPI.generate(enriched);
     // Award points for generating a letter (non-blocking)
