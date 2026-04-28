@@ -205,10 +205,10 @@ export const AuthProvider = ({ children }) => {
       const backendPayload = {};
       if (profileData.fullName !== undefined)       backendPayload.full_name      = profileData.fullName;
       if (profileData.phone !== undefined)          backendPayload.phone          = profileData.phone;
-      if (profileData.address_street !== undefined) backendPayload.address_street = profileData.address_street;
-      if (profileData.address_city !== undefined)   backendPayload.address_city   = profileData.address_city;
-      if (profileData.address_state !== undefined)  backendPayload.address_state  = profileData.address_state;
-      if (profileData.address_zip !== undefined)    backendPayload.address_zip    = profileData.address_zip;
+      if (profileData.address_street !== undefined) backendPayload.address_line1  = profileData.address_street;
+      if (profileData.address_city !== undefined)   backendPayload.city           = profileData.address_city;
+      if (profileData.address_state !== undefined)  backendPayload.state          = profileData.address_state;
+      if (profileData.address_zip !== undefined)    backendPayload.zip            = profileData.address_zip;
       await authAPI.updateProfile(backendPayload).catch(() => null); // don't fail if backend is unavailable
     } catch (e) {
       setError(e.message);
