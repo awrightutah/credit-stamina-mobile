@@ -1051,10 +1051,10 @@ const LettersScreen = ({ route }) => {
 
   const handleGenerate = async (params) => {
     const meta = user?.user_metadata ?? {};
-    const street = meta.address || meta.mailing_address || '';
-    const city = meta.city || '';
-    const stateVal = meta.state || '';
-    const zip = meta.zip || meta.postal_code || '';
+    const street = meta.address_street || meta.address || meta.mailing_address || '';
+    const city = meta.address_city || meta.city || '';
+    const stateVal = meta.address_state || meta.state || '';
+    const zip = meta.address_zip || meta.zip || meta.postal_code || '';
     const cityStateZip = (city || stateVal || zip)
       ? `${city}${city && stateVal ? ', ' : ''}${stateVal}${stateVal && zip ? ' ' : ''}${zip}`
       : '';
