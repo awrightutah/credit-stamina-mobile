@@ -427,7 +427,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
     }
   }, [letter]);
 
-  if (!letter) return null;
+  if (!letter || !currentLetter) return null;
 
   const isSigned = !!(currentLetter?.signature_name || currentLetter?.signed_at);
   const isSent   = ['sent', 'mailed', 'delivered'].includes((currentLetter?.status || '').toLowerCase());
