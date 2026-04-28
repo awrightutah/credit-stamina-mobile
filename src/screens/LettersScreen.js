@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { lettersAPI, accountsAPI, logActivity, pointsAPI } from '../services/api';
+import { lettersAPI, accountsAPI, logActivity, pointsAPI, legalAPI } from '../services/api';
 import { scheduleLetterReminder, cancelLetterReminder } from '../services/notifications';
 import PaymentModal from '../components/PaymentModal';
 import ProUpgradePrompt from '../components/ProUpgradePrompt';
@@ -365,6 +365,7 @@ const GenerateModal = ({ visible, onClose, onGenerate, accounts = [] }) => {
 // ─── Detail Modal ──────────────────────────────────────────────────────────────
 const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const { hasConsented, loading: consentLoading } = useESignConsent();
   const [signingLoading, setSigningLoading] = useState(false);
   const [mailLoading, setMailLoading]       = useState(false);
@@ -428,7 +429,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
   const isSigned = !!(currentLetter?.signature_name || currentLetter?.signed_at);
   const isSent   = ['sent', 'mailed', 'delivered', 'responded'].includes((currentLetter?.status || '').toLowerCase());
 
-  const handleOpenSignFlow = () => {
+  const handleOpenSignFlow = async () => {
     const letterData = {
       letterId:   currentLetter.id,
       letterType: getLetterTypeLabel(currentLetter.letter_type),
@@ -437,10 +438,24 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
     };
     // Close modal first so navigation works cleanly from behind the Modal
     onClose();
-    if (hasConsented) {
-      navigation.navigate('Signature', { letterData });
-    } else {
-      navigation.navigate('ESignConsent', { letterData });
+    // Per-sign revalidation: bypass the hook's cache and ask the API for the
+    // authoritative consent state. Stale cache must not let a user skip the
+    // consent screen if the server has no active consent.
+    try {
+      const liveConsent = await legalAPI.getESignConsent(user?.id);
+      if (liveConsent) {
+        navigation.navigate('Signature', { letterData });
+      } else {
+        navigation.navigate('ESignConsent', { letterData });
+      }
+    } catch {
+      // Network or other error: fall back to cached hasConsented state.
+      // The API gate at /api/letters/:id/mail provides server-side defense-in-depth.
+      if (hasConsented) {
+        navigation.navigate('Signature', { letterData });
+      } else {
+        navigation.navigate('ESignConsent', { letterData });
+      }
     }
   };
 

@@ -1189,127 +1189,62 @@ export const notificationsAPI = {
 };
 
 // ============================================
-// LEGAL / COMPLIANCE  (Supabase-direct)
-//
-// Required Supabase migrations — run once in the SQL editor:
-//
-// CREATE TABLE IF NOT EXISTS ai_disclaimer_acknowledgments (
-//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
-//   acknowledged_at timestamptz NOT NULL DEFAULT now(),
-//   version text NOT NULL DEFAULT '1.0'
-// );
-// ALTER TABLE ai_disclaimer_acknowledgments ENABLE ROW LEVEL SECURITY;
-// CREATE POLICY "own disclaimer ack" ON ai_disclaimer_acknowledgments
-//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-//
-// CREATE TABLE IF NOT EXISTS esign_consents (
-//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-//   consented_at timestamptz NOT NULL DEFAULT now(),
-//   withdrawn_at timestamptz,
-//   consent_text_version text NOT NULL DEFAULT '1.0'
-// );
-// ALTER TABLE esign_consents ENABLE ROW LEVEL SECURITY;
-// CREATE POLICY "own esign consents" ON esign_consents
-//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-//
-// CREATE TABLE IF NOT EXISTS signed_documents (
-//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-//   letter_id uuid,
-//   signer_name text NOT NULL,
-//   signed_at timestamptz NOT NULL DEFAULT now(),
-//   esign_consent_id uuid REFERENCES esign_consents(id),
-//   signature_svg text,
-//   is_active boolean NOT NULL DEFAULT true
-// );
-// ALTER TABLE signed_documents ENABLE ROW LEVEL SECURITY;
-// CREATE POLICY "own signed docs" ON signed_documents
-//   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+// LEGAL / COMPLIANCE
+// Schema in API repo: database/legal_compliance_tables_migration.sql.
+// Writes route through /api/legal/* (commit bda9e70). userId params
+// retained on signatures so existing call sites don't need updating;
+// server uses the authenticated user from the request JWT.
 // ============================================
 
 export const legalAPI = {
   // ─── AI Disclaimer ────────────────────────────────────────────────────────────
   getDisclaimerAck: async (userId) => {
+    // KEEP as direct Supabase read for now; table now exists post-migration.
+    // A GET endpoint can replace this later for full server-routed consistency.
     const { data, error } = await supabase
       .from('ai_disclaimer_acknowledgments')
-      .select('user_id, acknowledged_at, version')
+      .select('*')
       .eq('user_id', userId)
       .maybeSingle();
     if (error) throw error;
-    return data ?? null;
+    return data;
   },
 
   acknowledgeDisclaimer: async (userId, version = '1.0') => {
-    const { data, error } = await supabase
-      .from('ai_disclaimer_acknowledgments')
-      .upsert(
-        { user_id: userId, acknowledged_at: new Date().toISOString(), version },
-        { onConflict: 'user_id' }
-      )
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const res = await api.post('/api/legal/ai-disclaimer-acknowledgment', { version });
+    return res?.data?.acknowledgment ?? null;
   },
 
   // ─── eSign Consent ────────────────────────────────────────────────────────────
   getESignConsent: async (userId) => {
-    const { data, error } = await supabase
-      .from('esign_consents')
-      .select('*')
-      .eq('user_id', userId)
-      .is('withdrawn_at', null)
-      .order('consented_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data ?? null;
+    const res = await api.get('/api/legal/esign-consent');
+    return res?.data?.consent ?? null;
   },
 
   recordESignConsent: async (userId, version = '1.0') => {
-    const { data, error } = await supabase
-      .from('esign_consents')
-      .insert({
-        user_id: userId,
-        consented_at: new Date().toISOString(),
-        consent_text_version: version,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const res = await api.post('/api/legal/esign-consent', { version });
+    return res?.data?.consent ?? null;
   },
 
   withdrawESignConsent: async (userId) => {
-    const { error } = await supabase
-      .from('esign_consents')
-      .update({ withdrawn_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .is('withdrawn_at', null);
-    if (error) throw error;
+    const res = await api.post('/api/legal/esign-consent/withdraw', {});
+    return res?.data ?? null;
   },
 
   // ─── Signed Documents ─────────────────────────────────────────────────────────
   saveSignedDocument: async ({ userId, letterId, signerName, signedAt, esignConsentId, signatureSvg }) => {
-    const { data, error } = await supabase
-      .from('signed_documents')
-      .insert({
-        user_id: userId,
-        letter_id: letterId ?? null,
-        signer_name: signerName,
-        signed_at: signedAt ?? new Date().toISOString(),
-        esign_consent_id: esignConsentId ?? null,
-        signature_svg: signatureSvg ?? null,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const res = await api.post('/api/legal/signed-documents', {
+      letter_id: letterId ?? null,
+      signer_name: signerName,
+      signed_at: signedAt,
+      esign_consent_id: esignConsentId ?? null,
+      signature_svg: signatureSvg ?? null,
+    });
+    return res?.data?.signed_document ?? null;
   },
 
   getSignedDocuments: async (userId) => {
+    // KEEP as direct Supabase read for now; table now exists post-migration.
     const { data, error } = await supabase
       .from('signed_documents')
       .select('*')

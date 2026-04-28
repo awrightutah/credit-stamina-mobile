@@ -25,16 +25,32 @@ export const useESignConsent = () => {
   const load = useCallback(async () => {
     if (!user?.id) { setConsent(null); return; }
     try {
+      // Network-first: always check API for the authoritative state.
+      // The cache is a fast-path for status display only and must not gate
+      // signing decisions when stale (see commit 5415f85 / today's ESIGN audit).
+      const row = await legalAPI.getESignConsent(user.id).catch(() => undefined);
+      if (row !== undefined) {
+        setConsent(row ?? null);
+        if (cacheKey) {
+          if (row) {
+            AsyncStorage.setItem(cacheKey, JSON.stringify(row)).catch(() => null);
+          } else {
+            // No active consent server-side — clear cache to prevent stale
+            // hasConsented=true on next mount.
+            AsyncStorage.removeItem(cacheKey).catch(() => null);
+          }
+        }
+        return;
+      }
+      // Network failed (not a 4xx — those return null/row). Fall back to cache
+      // for offline resilience. The per-sign revalidation in handleOpenSignFlow
+      // is the actual gate; this cache is best-effort.
       const cached = await AsyncStorage.getItem(cacheKey).catch(() => null);
       if (cached) {
         setConsent(JSON.parse(cached));
         return;
       }
-      const row = await legalAPI.getESignConsent(user.id).catch(() => null);
-      setConsent(row ?? null);
-      if (row && cacheKey) {
-        AsyncStorage.setItem(cacheKey, JSON.stringify(row)).catch(() => null);
-      }
+      setConsent(null);
     } catch {
       setConsent(null);
     }
