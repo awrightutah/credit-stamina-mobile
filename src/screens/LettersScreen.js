@@ -710,7 +710,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
                     style={[styles.mailToggleBtn, !isSigned && styles.mailToggleBtnDisabled]}
                     onPress={() => isSigned ? setShowMailForm(true) : Alert.alert('Sign First', 'Sign the letter before mailing.')}
                   >
-                    <Text style={styles.mailToggleBtnText}>Mail via USPS — $2.99</Text>
+                    <Text style={styles.mailToggleBtnText}>Mail via USPS — $9.99</Text>
                   </TouchableOpacity>
                 ) : (
                   <>
@@ -964,10 +964,10 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
         visible={paymentVisible}
         onClose={() => setPaymentVisible(false)}
         onSuccess={handlePaymentSuccess}
-        amount={2.99}
+        amount={9.99}
         description={`USPS first-class mailing — ${getLetterTypeLabel(currentLetter.letter_type)} to ${recipientName || currentLetter.bureau}`}
         mode="collect"
-        submitLabel="Pay $2.99 & Send Letter"
+        submitLabel="Pay $9.99 & Send Letter"
       />
 
       {/* Card collector for escalation / follow-up letter mailing */}
@@ -975,10 +975,10 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
         visible={escalationPaymentVisible}
         onClose={() => setEscalationPaymentVisible(false)}
         onSuccess={handleEscalationPaymentSuccess}
-        amount={2.99}
+        amount={9.99}
         description={`USPS first-class mailing — Follow-up letter to ${recipientName || currentLetter.bureau}`}
         mode="collect"
-        submitLabel="Pay $2.99 & Send Follow-Up"
+        submitLabel="Pay $9.99 & Send Follow-Up"
       />
     </Modal>
   );
