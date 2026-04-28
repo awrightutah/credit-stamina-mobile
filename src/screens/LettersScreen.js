@@ -880,7 +880,9 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
             )}
 
             {/* AI Escalation — shown when declined or no response */}
+            {/* v1 escalation: MOV only, supports bureau-dispute parents (per API 28a3eb4). */}
             {isSent && !showEscalation &&
+              currentLetter.letter_type === 'bureau-dispute' &&
               ((outcome === 'declined' || outcome === 'no_response') ||
                (currentLetter.outcome === 'declined' || currentLetter.outcome === 'no_response')) && (
               <View style={styles.escalationCard}>
