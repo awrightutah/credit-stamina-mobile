@@ -167,14 +167,14 @@ const SignatureScreen = () => {
       const svgString = buildSVGString(completedStrokes, PAD_WIDTH, PAD_HEIGHT);
 
       // 1. Update the letter record with the signer name via existing backend endpoint
-      if (letterData?.id) {
-        await lettersAPI.sign(letterData.id, signerName.trim());
+      if (letterData?.letterId) {
+        await lettersAPI.sign(letterData.letterId, signerName.trim());
       }
 
       // 2. Save the full signed-document record (with SVG) to Supabase
       const signedDoc = await legalAPI.saveSignedDocument({
         userId: user.id,
-        letterId: letterData?.id ?? null,
+        letterId: letterData?.letterId ?? null,
         signerName: signerName.trim(),
         signedAt,
         esignConsentId: consentId ?? null,
@@ -220,12 +220,12 @@ const SignatureScreen = () => {
           {[
             {
               label: 'Document Type',
-              value: (letterData?.letter_type ?? 'letter')
+              value: (letterData?.letterType ?? 'letter')
                 .replace(/_/g, ' ')
                 .replace(/\b\w/g, c => c.toUpperCase()),
             },
-            { label: 'Bureau / Creditor', value: letterData?.bureau || letterData?.account_name || 'N/A' },
-            { label: 'Account',           value: letterData?.account_name || 'N/A' },
+            { label: 'Bureau / Creditor', value: letterData?.bureau || 'N/A' },
+            { label: 'Account',           value: letterData?.accountName || 'N/A' },
             { label: 'Date',              value: today },
           ].map(({ label, value }) => (
             <View key={label} style={styles.summaryRow}>

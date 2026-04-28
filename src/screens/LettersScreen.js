@@ -431,10 +431,11 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
 
   const handleOpenSignFlow = async () => {
     const letterData = {
-      letterId:   currentLetter.id,
-      letterType: getLetterTypeLabel(currentLetter.letter_type),
-      creditor:   currentLetter.account_name || currentLetter.creditor_name || currentLetter.creditor || 'Unknown',
-      bureau:     currentLetter.bureau,
+      letterId:    currentLetter.id,
+      letterType:  getLetterTypeLabel(currentLetter.letter_type),
+      creditor:    currentLetter.account_name || currentLetter.creditor_name || currentLetter.creditor || 'Unknown',
+      accountName: currentLetter.account_name || currentLetter.creditor_name || currentLetter.creditor || 'Unknown',
+      bureau:      currentLetter.bureau,
     };
     // Close modal first so navigation works cleanly from behind the Modal
     onClose();
