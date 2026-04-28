@@ -661,11 +661,11 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
             </View>
 
             {/* Letter Content */}
-            {currentLetter.content && (
+            {(currentLetter.letter_content || currentLetter.content) && (
               <View style={styles.contentSection}>
                 <Text style={styles.inputLabel}>LETTER CONTENT</Text>
                 <View style={styles.letterContentBox}>
-                  <Text style={styles.letterContentText}>{currentLetter.content}</Text>
+                  <Text style={styles.letterContentText}>{currentLetter.letter_content || currentLetter.content}</Text>
                 </View>
                 <AIDisclaimer style={styles.letterAIDisclaimer} />
               </View>
