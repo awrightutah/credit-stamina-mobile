@@ -426,7 +426,7 @@ const DetailModal = ({ letter, visible, onClose, onLetterUpdated }) => {
   if (!letter || !currentLetter) return null;
 
   const isSigned = !!(currentLetter?.signature_name || currentLetter?.signed_at);
-  const isSent   = ['sent', 'mailed', 'delivered'].includes((currentLetter?.status || '').toLowerCase());
+  const isSent   = ['sent', 'mailed', 'delivered', 'responded'].includes((currentLetter?.status || '').toLowerCase());
 
   const handleOpenSignFlow = () => {
     const letterData = {
